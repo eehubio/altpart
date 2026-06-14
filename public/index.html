@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AltPart AI v2 · 功能演示</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2L3 7v10l9 5 9-5V7l-9-5z' fill='%231a6c4e'/></svg>">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+button{outline:none;font-family:inherit}
+body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:#f7faf8;color:#1a2e23}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-thumb{background:#c2e5d3;border-radius:3px}
+.demo-banner{background:linear-gradient(90deg,#fef9ed,#fff);padding:8px 24px;font-size:12px;color:#854f0b;border-bottom:1px solid #f0dca0;display:flex;justify-content:space-between;align-items:center}
+.feature-tag{display:inline-block;padding:1px 6px;border-radius:3px;background:#eef0f8;color:#4f5fa3;font-size:10px;margin-left:4px;font-weight:600}
+@media(max-width:768px){
+  .work-area{grid-template-columns:1fr!important}
+  .nav-tabs{overflow-x:auto;flex-wrap:nowrap!important}
+  .summary-grid{grid-template-columns:repeat(2,1fr)!important}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script type="text/babel">
+const{useState,useEffect}=React;
+
+// ═══════════════════════════════════════
+// MOCK DATA (模拟数据，演示用)
+// ═══════════════════════════════════════
+const SCENARIOS=[
+  {id:"shortage",icon:"🔄",label:"缺货替代",desc:"原型号缺货，需直接替换"},
+  {id:"domestic",icon:"🇨🇳",label:"国产替代",desc:"国产化降低供应链风险"},
+  {id:"costDown",icon:"💰",label:"降本替代",desc:"功能够用，优先考虑成本"},
+  {id:"newDesign",icon:"📐",label:"新设计选型",desc:"不限封装，推荐最优方案"},
+  {id:"avlExpand",icon:"🏭",label:"量产AVL",desc:"扩展合格供应商列表"},
+  {id:"education",icon:"🎓",label:"教学竞赛",desc:"价格低，开发资料丰富"},
+];
+
+// MCU 完整 mock 数据
+const MOCK_MCU={
+  partNumber:"STM32F103C8T6",
+  manufacturer:"STMicroelectronics",
+  category:"微控制器(MCU)",
+  _templateUsed:"MCU",
+  description:"32位ARM Cortex-M3 MCU，72MHz主频，64KB Flash",
+  parameters:[
+    {id:"param_1",name:"内核",nameEn:"Core",value:"ARM Cortex-M3",unit:""},
+    {id:"param_2",name:"最高主频",nameEn:"Max Frequency",value:"72",unit:"MHz"},
+    {id:"param_3",name:"Flash",nameEn:"Flash Memory",value:"64",unit:"KB"},
+    {id:"param_4",name:"SRAM",nameEn:"SRAM",value:"20",unit:"KB"},
+    {id:"param_5",name:"工作电压",nameEn:"Supply Voltage",value:"2.0 to 3.6",unit:"V"},
+    {id:"param_6",name:"GPIO数量",nameEn:"GPIO Count",value:"37",unit:""},
+    {id:"param_7",name:"ADC",nameEn:"ADC",value:"12-bit, 10ch",unit:""},
+    {id:"param_8",name:"通信接口",nameEn:"Interfaces",value:"UART×3,SPI×2,I2C×2,CAN,USB",unit:""},
+    {id:"param_9",name:"定时器",nameEn:"Timers",value:"7",unit:""},
+    {id:"param_10",name:"工作温度",nameEn:"Operating Temperature",value:"-40 to 85",unit:"°C"},
+    {id:"param_11",name:"封装",nameEn:"Package",value:"LQFP-48",unit:""},
+    {id:"param_12",name:"参考价格",nameEn:"Reference Price",value:"2.50",unit:"USD"},
+  ],
+};
+
+const MOCK_RECS=[
+  {
+    rank:1,partNumber:"GD32F103C8T6",manufacturer:"兆易创新 (GigaDevice)",
+    description:"ARM Cortex-M3 国产MCU，108MHz主频，64KB Flash",
+    isPreferred:true,overallScore:92,
+    replacementLevel:{level:"A",label:"直接替代",color:"#1a6c4e",desc:"Pin-to-Pin兼容，可直接替换"},
+    dimensionScores:{hardware:100,functional:90,electrical:88,supply:85,risk:78},
+    suitableScenarios:["缺货替代","国产替代","降本替代"],
+    advice:"先做5-10片样板验证，不建议直接大批量替换",
+    advantages:"主频更高，国产稳定供货，价格更优",
+    risks:"Flash下载算法需验证，外设寄存器细节有差异",
+    paramScores:[
+      {paramId:"param_1",value:"ARM Cortex-M3",unit:"",score:100,comment:"一致",source:"AI查询",confidence:"medium"},
+      {paramId:"param_2",value:"108",unit:"MHz",score:85,comment:"主频更高",source:"DigiKey",confidence:"high"},
+      {paramId:"param_3",value:"64",unit:"KB",score:100,comment:"一致",source:"DigiKey",confidence:"high"},
+      {paramId:"param_4",value:"20",unit:"KB",score:100,comment:"一致",source:"DigiKey",confidence:"high"},
+      {paramId:"param_5",value:"2.6 to 3.6",unit:"V",score:95,comment:"接近",source:"DigiKey",confidence:"high"},
+      {paramId:"param_6",value:"37",unit:"",score:100,comment:"一致",source:"DigiKey",confidence:"high"},
+      {paramId:"param_7",value:"12-bit, 10ch",unit:"",score:100,comment:"一致",source:"DigiKey",confidence:"high"},
+      {paramId:"param_8",value:"UART×3,SPI×2,I2C×2,CAN,USB",unit:"",score:95,comment:"基本一致",source:"DigiKey",confidence:"high"},
+      {paramId:"param_9",value:"7",unit:"",score:100,comment:"一致",source:"AI查询",confidence:"medium"},
+      {paramId:"param_10",value:"-40 to 85",unit:"°C",score:100,comment:"完全覆盖",source:"DigiKey",confidence:"high"},
+      {paramId:"param_11",value:"LQFP-48",unit:"",score:100,comment:"一致",source:"DigiKey",confidence:"high"},
+      {paramId:"param_12",value:"1.20",unit:"USD",score:70,comment:"价格更低",source:"Mouser",confidence:"high"},
+    ],
+    lifecycle:{status:"active",label:"在产",icon:"🟢"},
+    procurement:{
+      digikey:{stock:12450,tiers:[{qty:1,price:"$1.20"},{qty:10,price:"$1.05"},{qty:100,price:"$0.88"}],url:"#"},
+      mouser:{stock:8800,tiers:[{qty:1,price:"$1.18"},{qty:10,price:"$1.02"},{qty:100,price:"$0.85"}],url:"#"},
+    },
+  },
+  {
+    rank:2,partNumber:"CH32F103C8T6",manufacturer:"沁恒微电子 (WCH)",
+    description:"国产Cortex-M3 MCU，128KB Flash版本",
+    isPreferred:true,overallScore:84,
+    replacementLevel:{level:"B",label:"硬件兼容",color:"#2d9d6f",desc:"封装兼容，软件需验证"},
+    dimensionScores:{hardware:95,functional:85,electrical:80,supply:90,risk:65},
+    suitableScenarios:["国产替代","降本替代"],
+    advice:"软件需做较多兼容性验证",
+    advantages:"价格非常有优势，国产供货稳定",
+    risks:"HAL库需移植，外设差异较大",
+    paramScores:[
+      {paramId:"param_1",value:"ARM Cortex-M3",unit:"",score:100,comment:"一致",source:"AI查询",confidence:"medium"},
+      {paramId:"param_2",value:"72",unit:"MHz",score:100,comment:"一致",source:"AI查询",confidence:"medium"},
+      {paramId:"param_3",value:"128",unit:"KB",score:85,comment:"容量更大",source:"AI查询",confidence:"medium"},
+      {paramId:"param_4",value:"20",unit:"KB",score:100,comment:"一致",source:"AI查询",confidence:"medium"},
+      {paramId:"param_5",value:"2.7 to 5.5",unit:"V",score:85,comment:"范围更宽",source:"AI查询",confidence:"medium"},
+      {paramId:"param_6",value:"37",unit:"",score:100,comment:"一致",source:"AI查询",confidence:"medium"},
+      {paramId:"param_7",value:"12-bit, 10ch",unit:"",score:100,comment:"一致",source:"AI查询",confidence:"medium"},
+      {paramId:"param_8",value:"UART×3,SPI×2,I2C×2,USB",unit:"",score:80,comment:"缺少CAN",source:"AI查询",confidence:"medium"},
+      {paramId:"param_9",value:"N/A",unit:"",score:50,comment:"未查到",source:"",confidence:"none"},
+      {paramId:"param_10",value:"-40 to 85",unit:"°C",score:100,comment:"完全覆盖",source:"AI查询",confidence:"medium"},
+      {paramId:"param_11",value:"LQFP-48",unit:"",score:100,comment:"一致",source:"AI查询",confidence:"medium"},
+      {paramId:"param_12",value:"0.65",unit:"USD",score:60,comment:"价格优势明显",source:"LCSC",confidence:"medium"},
+    ],
+    lifecycle:{status:"active",label:"在产",icon:"🟢"},
+    procurement:{
+      digikey:{stock:3200,tiers:[{qty:1,price:"$0.65"},{qty:10,price:"$0.55"},{qty:100,price:"$0.42"}],url:"#"},
+      mouser:{stock:0,tiers:[{qty:1,price:"-"}],url:"#"},
+    },
+  },
+  {
+    rank:3,partNumber:"APM32F103C8T6",manufacturer:"极海半导体 (Geehy)",
+    description:"国产Cortex-M3 MCU，STM32替代专用",
+    isPreferred:false,overallScore:88,
+    replacementLevel:{level:"B",label:"硬件兼容",color:"#2d9d6f",desc:"封装兼容，软件需验证"},
+    dimensionScores:{hardware:100,functional:88,electrical:85,supply:80,risk:72},
+    suitableScenarios:["缺货替代","国产替代"],
+    advice:"标榜STM32兼容，但需实测",
+    advantages:"针对STM32替代设计，软件兼容性较好",
+    risks:"工业级以上场景需谨慎验证",
+    paramScores:[
+      {paramId:"param_1",value:"ARM Cortex-M3",unit:"",score:100,comment:"一致",source:"AI查询",confidence:"medium"},
+      {paramId:"param_2",value:"96",unit:"MHz",score:90,comment:"主频略高",source:"DigiKey",confidence:"high"},
+      {paramId:"param_3",value:"64",unit:"KB",score:100,comment:"一致",source:"DigiKey",confidence:"high"},
+      {paramId:"param_4",value:"20",unit:"KB",score:100,comment:"一致",source:"DigiKey",confidence:"high"},
+      {paramId:"param_5",value:"2.0 to 3.6",unit:"V",score:100,comment:"一致",source:"DigiKey",confidence:"high"},
+      {paramId:"param_6",value:"37",unit:"",score:100,comment:"一致",source:"DigiKey",confidence:"high"},
+      {paramId:"param_7",value:"12-bit, 10ch",unit:"",score:100,comment:"一致",source:"DigiKey",confidence:"high"},
+      {paramId:"param_8",value:"UART×3,SPI×2,I2C×2,CAN,USB",unit:"",score:100,comment:"一致",source:"DigiKey",confidence:"high"},
+      {paramId:"param_9",value:"7",unit:"",score:100,comment:"一致",source:"AI查询",confidence:"medium"},
+      {paramId:"param_10",value:"-40 to 85",unit:"°C",score:100,comment:"完全覆盖",source:"DigiKey",confidence:"high"},
+      {paramId:"param_11",value:"LQFP-48",unit:"",score:100,comment:"一致",source:"DigiKey",confidence:"high"},
+      {paramId:"param_12",value:"1.50",unit:"USD",score:75,comment:"价格略低",source:"LCSC",confidence:"medium"},
+    ],
+    lifecycle:{status:"active",label:"在产",icon:"🟢"},
+    procurement:{
+      digikey:{stock:5800,tiers:[{qty:1,price:"$1.50"},{qty:10,price:"$1.28"},{qty:100,price:"$0.95"}],url:"#"},
+      mouser:{stock:2100,tiers:[{qty:1,price:"$1.48"}],url:"#"},
+    },
+  },
+];
+
+const MCU_SW_CHECKS=[
+  {item:"CMSIS 支持",risk:"low"},{item:"HAL/LL 库兼容",risk:"medium"},
+  {item:"标准外设库兼容",risk:"medium"},{item:"Flash 下载算法",risk:"medium"},
+  {item:"IDE 支持 (Keil/IAR)",risk:"low"},{item:"Bootloader 兼容",risk:"high"},
+  {item:"外设寄存器兼容",risk:"high"},
+];
+
+// v2.1: 器件详情 mock 数据（来自 ezPLM）
+const MOCK_PART_DETAILS={
+  "GD32F103C8T6":{
+    inPLM:true,internalPN:"EE-IC-0118",approved:true,
+    datasheetUrl:"#",usedInProjects:["PRJ-2024-022"],
+    suppliers:[
+      {name:"深圳华秋电子",type:"distributor",stock:25000,moq:10,leadTimeDays:1,
+        tiers:[{qty:10,price:"¥8.20"},{qty:100,price:"¥7.50"},{qty:1000,price:"¥6.80"}],
+        lastQuoteDate:"2026-03-28"},
+      {name:"立创商城",type:"distributor",stock:48200,moq:1,leadTimeDays:1,
+        tiers:[{qty:1,price:"¥8.50"},{qty:30,price:"¥7.90"},{qty:500,price:"¥7.10"}],
+        lastQuoteDate:"2026-04-01"},
+      {name:"兆易创新(原厂)",type:"manufacturer",stock:null,moq:3000,leadTimeDays:42,
+        tiers:[{qty:3000,price:"¥6.20"},{qty:10000,price:"¥5.80"}],
+        lastQuoteDate:"2026-03-15"},
+    ],
+    inventory:{internal:850,reserved:200,available:650,location:"深圳仓-A12"},
+    priceHistory:[{date:"2026-01",price:7.2},{date:"2026-02",price:7.0},{date:"2026-03",price:6.9},{date:"2026-04",price:6.8}],
+    qualityRecords:[
+      {date:"2026-02-18",batch:"B240218",result:"合格",note:"来料检验通过, AQL 0.65"},
+      {date:"2025-11-03",batch:"B231103",result:"合格",note:"高温老化测试通过"},
+    ],
+  },
+  "CH32F103C8T6":{
+    inPLM:false,
+    message:"该器件未收录于 ezPLM 物料库",
+    suppliers:[],inventory:null,
+  },
+  "APM32F103C8T6":{
+    inPLM:true,internalPN:"EE-IC-0205",approved:false,
+    datasheetUrl:"#",usedInProjects:[],
+    suppliers:[
+      {name:"立创商城",type:"distributor",stock:12000,moq:1,leadTimeDays:1,
+        tiers:[{qty:1,price:"¥10.50"},{qty:100,price:"¥9.20"}],
+        lastQuoteDate:"2026-03-20"},
+    ],
+    inventory:{internal:0,reserved:0,available:0,location:"-"},
+    priceHistory:[],
+    qualityRecords:[],
+  },
+};
+
+const DIM_LABELS={hardware:"🔌 硬件兼容",functional:"⚙️ 功能兼容",electrical:"⚡ 电气参数",supply:"📦 供应链",risk:"🛡️ 风险评估"};
+
+const FEEDBACK_STATUS={
+  verified:{icon:"✅",label:"已验证可用",color:"#1a6c4e"},
+  partial:{icon:"⚠️",label:"部分可用",color:"#b8860b"},
+  failed:{icon:"❌",label:"不可替代",color:"#c0392b"},
+  testing:{icon:"🔬",label:"验证中",color:"#4f5fa3"},
+};
+
+const C={
+  green:"#1a6c4e",greenLight:"#e8f5ef",greenMid:"#c2e5d3",greenAccent:"#2d9d6f",
+  bg:"#fff",bgSoft:"#f7faf8",border:"#d4e8dc",borderLight:"#e8f0ec",
+  text:"#1a2e23",textSec:"#4a6b58",textMute:"#8aa698",
+  indigo:"#4f5fa3",indigoBg:"#eef0f8",indigoBorder:"#c9cfe6",
+  amber:"#b8860b",amberBg:"#fef9ed",
+};
+
+function scoreColor(s){return s>=90?C.green:s>=75?"#b8860b":s>=60?"#c2610c":"#c0392b"}
+function scoreBg(s){return s>=90?"#e8f5ef":s>=75?"#fef9ed":s>=60?"#fef3e6":"#fdeaea"}
+
+// ═══════════════════════════════════════
+// COMPONENTS
+// ═══════════════════════════════════════
+
+// Score ring
+function ScoreRing({score,size=56,label}){
+  const r=(size-8)/2,circ=2*Math.PI*r,offset=circ*(1-score/100),color=scoreColor(score);
+  return(<svg width={size} height={size}>
+    <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={C.borderLight} strokeWidth="4"/>
+    <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth="4"
+      strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+      transform={`rotate(-90 ${size/2} ${size/2})`}/>
+    <text x={size/2} y={size/2+1} textAnchor="middle" dominantBaseline="central" fill={color}
+      fontSize={size*0.26} fontWeight="700" fontFamily="'DM Mono',monospace">{score}</text>
+  </svg>);
+}
+
+// Dimension score bar
+function DimBar({label,score}){
+  return(<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+    <span style={{fontSize:12,color:C.textSec,minWidth:90}}>{label}</span>
+    <div style={{flex:1,height:6,background:C.borderLight,borderRadius:3,overflow:"hidden"}}>
+      <div style={{width:`${score}%`,height:"100%",background:scoreColor(score),transition:"width 0.6s"}}/>
+    </div>
+    <span style={{fontSize:12,fontWeight:600,color:scoreColor(score),fontFamily:"'DM Mono',monospace",minWidth:32,textAlign:"right"}}>{score}</span>
+  </div>);
+}
+
+// Replacement level badge
+function LevelBadge({level}){
+  return(<span style={{padding:"3px 10px",borderRadius:5,background:level.color,color:"#fff",fontSize:12,fontWeight:700,letterSpacing:0.5}}>
+    [{level.level}] {level.label}
+  </span>);
+}
+
+// Source badge
+function SourceTag({source,confidence}){
+  if(!source)return null;
+  const isHigh=confidence==="high";
+  const color=isHigh?C.green:C.amber;
+  const bg=isHigh?C.greenLight:C.amberBg;
+  const icon=isHigh?"✓":"⚠";
+  return(<span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:bg,color,border:`1px solid ${color}40`,marginLeft:6}}>
+    📎 {source} {icon}
+  </span>);
+}
+
+// Feedback panel
+function FeedbackPanel({pn}){
+  const[status,setStatus]=useState(null);
+  const[expanded,setExpanded]=useState(false);
+  const[submitted,setSubmitted]=useState(false);
+  
+  if(submitted){
+    const st=FEEDBACK_STATUS[status];
+    return(<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 18px",background:C.greenLight,borderTop:`1px solid ${C.greenMid}`,fontSize:12,color:C.green}}>
+      <span>{st.icon} {st.label}</span>
+      <span style={{color:C.textMute,fontSize:11}}>感谢反馈，将帮助优化推荐质量</span>
+      <button style={{marginLeft:"auto",padding:"2px 8px",borderRadius:4,border:`1px solid ${C.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} onClick={()=>setSubmitted(false)}>修改</button>
+    </div>);
+  }
+  return(<div style={{borderTop:`1px dashed ${C.border}`,padding:"8px 18px 10px",background:"#fafcfb"}}>
+    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+      <span style={{fontSize:12,color:C.textMute}}>验证结果:</span>
+      {Object.entries(FEEDBACK_STATUS).filter(([k])=>k!=="testing").map(([k,v])=>(
+        <button key={k} onClick={()=>{setStatus(k);if(!expanded){setTimeout(()=>setSubmitted(true),200)}}}
+          style={{padding:"3px 8px",borderRadius:4,borderWidth:1,borderStyle:"solid",borderColor:status===k?v.color:C.border,background:status===k?v.color+"15":"#fff",fontSize:11,cursor:"pointer"}}>
+          {v.icon} {v.label}
+        </button>
+      ))}
+      <button onClick={()=>setExpanded(!expanded)} style={{padding:"3px 8px",borderRadius:4,border:`1px solid ${C.indigoBorder}`,background:C.indigoBg,color:C.indigo,fontSize:11,cursor:"pointer",marginLeft:"auto"}}>
+        {expanded?"收起":"详细"}
+      </button>
+    </div>
+    {expanded&&(<div style={{marginTop:8,padding:"8px 0"}}>
+      {[["PCB可直接替换"],["软件/固件兼容"],["电气参数已验证"]].map(([label],i)=>(
+        <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}>
+          <span style={{fontSize:12,color:C.textSec,minWidth:120}}>{label}</span>
+          <div style={{display:"flex",gap:4}}>
+            <button style={{padding:"3px 8px",borderRadius:4,border:`1px solid ${C.border}`,background:"#fff",fontSize:11,cursor:"pointer"}}>✅ 是</button>
+            <button style={{padding:"3px 8px",borderRadius:4,border:`1px solid ${C.border}`,background:"#fff",fontSize:11,cursor:"pointer"}}>❌ 否</button>
+            <button style={{padding:"3px 8px",borderRadius:4,border:`1px solid ${C.border}`,background:"#fff",fontSize:11,cursor:"pointer"}}>❓ 未测</button>
+          </div>
+        </div>
+      ))}
+      <textarea style={{width:"100%",padding:"6px 8px",borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,fontFamily:"inherit",marginTop:6}} rows={2} placeholder="补充说明（可选）..."/>
+      <button onClick={()=>setSubmitted(true)} disabled={!status} style={{marginTop:8,padding:"6px 16px",borderRadius:6,border:"none",background:status?C.green:C.borderLight,color:"#fff",fontSize:13,fontWeight:600,cursor:status?"pointer":"not-allowed"}}>提交反馈</button>
+    </div>)}
+  </div>);
+}
+
+// MCU Software Compatibility Panel
+function MCUSoftwarePanel(){
+  return(<div style={{margin:"10px 18px",padding:"10px 12px",borderRadius:8,background:C.indigoBg,border:`1px solid ${C.indigoBorder}`}}>
+    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+      <span style={{fontSize:13,fontWeight:600,color:C.indigo}}>🔧 软件迁移难度评估</span>
+      <span style={{fontSize:11,padding:"1px 6px",borderRadius:3,background:"#fef9ed",color:C.amber,fontWeight:600}}>中等</span>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:4}}>
+      {MCU_SW_CHECKS.map((c,i)=>{
+        const icon={low:"✅",medium:"⚠️",high:"❓"}[c.risk];
+        const label={low:"低",medium:"中",high:"高(需验证)"}[c.risk];
+        const color={low:C.green,medium:C.amber,high:"#c0392b"}[c.risk];
+        return(<div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"4px 8px",fontSize:12}}>
+          <span>{icon} {c.item}</span>
+          <span style={{color,fontSize:11,fontWeight:600}}>风险: {label}</span>
+        </div>);
+      })}
+    </div>
+    <div style={{marginTop:8,padding:"6px 8px",fontSize:11,color:C.indigo,background:"#fff",borderRadius:5}}>
+      💡 建议：先做 5-10 片样板验证，确认 Flash 算法和外设寄存器兼容性后再批量替换
+    </div>
+  </div>);
+}
+
+// Lifecycle badge
+function LifecycleBadge({lc}){
+  return(<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 7px",borderRadius:4,background:C.greenLight,color:C.green,fontSize:11,border:`1px solid ${C.greenMid}`}}>
+    {lc.icon} {lc.label}
+  </span>);
+}
+
+// ═══════════════════════════════════════
+// PAGES
+// ═══════════════════════════════════════
+
+// v2.1: 器件详情弹窗（数据来自 ezPLM，样式匹配本智能体）
+function PartDetailModal({pn,rec,onClose}){
+  const[detail,setDetail]=useState(MOCK_PART_DETAILS[pn]||null);
+  const[loading,setLoading]=useState(true);
+  useEffect(()=>{
+    let cancelled=false;
+    fetch(`/api/v2/part-detail/${encodeURIComponent(pn)}`).then(r=>r.ok?r.json():null).then(d=>{
+      if(cancelled)return;
+      if(d&&(d.inPLM||d.suppliers?.length))setDetail(d);
+      else if(!MOCK_PART_DETAILS[pn])setDetail(d||{inPLM:false,suppliers:[],inventory:null});
+      setLoading(false);
+    }).catch(()=>{ if(!cancelled){setDetail(MOCK_PART_DETAILS[pn]||{inPLM:false,suppliers:[],inventory:null});setLoading(false);} });
+    return()=>{cancelled=true};
+  },[pn]);
+  const d=detail||{inPLM:false,suppliers:[],inventory:null};
+  return(<div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(26,46,35,0.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,animation:"fadeUp 0.2s ease both"}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,maxWidth:760,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}}>
+      
+      {/* 弹窗头部 */}
+      <div style={{padding:"18px 24px",borderBottom:`1px solid ${C.borderLight}`,display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,background:"#fff",zIndex:1,borderRadius:"14px 14px 0 0"}}>
+        <div style={{flex:1}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4}}>
+            <span style={{fontSize:20,fontWeight:700,fontFamily:"'DM Mono',monospace",color:C.green}}>{pn}</span>
+            {d.inPLM?(
+              <React.Fragment>
+                <span style={{padding:"2px 8px",borderRadius:4,background:C.greenLight,color:C.green,fontSize:11,fontWeight:600,border:`1px solid ${C.greenMid}`}}>📦 ezPLM已收录</span>
+                {d.approved
+                  ?<span style={{padding:"2px 8px",borderRadius:4,background:C.greenLight,color:C.green,fontSize:11,fontWeight:600,border:`1px solid ${C.greenMid}`}}>✅ 已认证</span>
+                  :<span style={{padding:"2px 8px",borderRadius:4,background:C.amberBg,color:C.amber,fontSize:11,fontWeight:600,border:"1px solid #f0dca0"}}>⏳ 待认证</span>}
+              </React.Fragment>
+            ):(
+              <span style={{padding:"2px 8px",borderRadius:4,background:"#f5f5f5",color:C.textMute,fontSize:11,border:"1px solid #ddd"}}>未收录于ezPLM</span>
+            )}
+          </div>
+          <div style={{fontSize:13,color:C.textMute}}>
+            {rec?.manufacturer}
+            {d.internalPN&&<span style={{marginLeft:10,fontFamily:"'DM Mono',monospace"}}>内部编号: {d.internalPN}</span>}
+          </div>
+        </div>
+        <button onClick={onClose} style={{width:32,height:32,borderRadius:8,border:`1px solid ${C.border}`,background:"#fff",fontSize:16,cursor:"pointer",color:C.textSec}}>✕</button>
+      </div>
+      
+      <div style={{padding:"16px 24px"}}>
+        
+        {!d.inPLM&&(<div style={{padding:"30px",textAlign:"center",color:C.textMute}}>
+          <div style={{fontSize:36,marginBottom:10}}>📭</div>
+          <p style={{fontSize:14,marginBottom:6}}>该器件未收录于 ezPLM 物料库</p>
+          <p style={{fontSize:12}}>无供应商采购信息和内部库存数据</p>
+          <button style={{marginTop:16,padding:"8px 20px",borderRadius:7,border:`1px solid ${C.indigoBorder}`,background:C.indigoBg,color:C.indigo,fontSize:13,fontWeight:600,cursor:"pointer"}}>+ 申请加入物料库</button>
+        </div>)}
+        
+        {d.inPLM&&(<React.Fragment>
+        
+        {/* 内部库存 */}
+        {d.inventory&&(<div style={{marginBottom:18}}>
+          <h4 style={{fontSize:14,fontWeight:600,marginBottom:8,display:"flex",alignItems:"center",gap:6}}>🏬 公司内部库存 <span className="feature-tag">ezPLM</span></h4>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+            {[["总库存",d.inventory.internal],["已预留",d.inventory.reserved],["可用",d.inventory.available],["库位",d.inventory.location]].map(([l,v])=>(
+              <div key={l} style={{padding:"10px",borderRadius:8,background:C.bgSoft,border:`1px solid ${C.borderLight}`,textAlign:"center"}}>
+                <div style={{fontSize:16,fontWeight:700,fontFamily:"'DM Mono',monospace",color:l==="可用"?C.green:C.text}}>{v}</div>
+                <div style={{fontSize:11,color:C.textMute,marginTop:2}}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </div>)}
+        
+        {/* 供应商采购信息 */}
+        <div style={{marginBottom:18}}>
+          <h4 style={{fontSize:14,fontWeight:600,marginBottom:8,display:"flex",alignItems:"center",gap:6}}>🛒 供应商采购信息 <span className="feature-tag">ezPLM</span></h4>
+          {d.suppliers.length===0?<p style={{fontSize:13,color:C.textMute}}>暂无供应商报价记录</p>:(
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden"}}>
+                <thead><tr style={{background:C.greenLight}}>
+                  {["供应商","类型","库存","起订量","交期","阶梯价格","报价日期"].map(h=>(<th key={h} style={{padding:"8px 10px",fontWeight:600,color:C.green,textAlign:"left",fontSize:11,borderBottom:`1px solid ${C.greenMid}`,whiteSpace:"nowrap"}}>{h}</th>))}
+                </tr></thead>
+                <tbody>{d.suppliers.map((s,i)=>(<tr key={i} style={i%2?{background:C.bgSoft}:{}}>
+                  <td style={{padding:"8px 10px",fontWeight:600,fontSize:12}}>{s.name}</td>
+                  <td style={{padding:"8px 10px"}}><span style={{padding:"1px 6px",borderRadius:3,fontSize:10,background:s.type==="manufacturer"?C.indigoBg:C.greenLight,color:s.type==="manufacturer"?C.indigo:C.green}}>{s.type==="manufacturer"?"原厂":"分销商"}</span></td>
+                  <td style={{padding:"8px 10px",fontFamily:"'DM Mono',monospace",color:s.stock>0?C.green:C.textMute}}>{s.stock!=null?s.stock.toLocaleString():"按单生产"}</td>
+                  <td style={{padding:"8px 10px",fontFamily:"'DM Mono',monospace"}}>{s.moq}</td>
+                  <td style={{padding:"8px 10px"}}>{s.leadTimeDays!=null?`${s.leadTimeDays}天`:"-"}</td>
+                  <td style={{padding:"8px 10px"}}>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      {s.tiers.map((t,j)=>(<span key={j} style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:C.textSec}}>{t.qty}+:<b style={{color:C.green}}>{t.price}</b></span>))}
+                    </div>
+                  </td>
+                  <td style={{padding:"8px 10px",fontSize:11,color:C.textMute}}>{s.lastQuoteDate}</td>
+                </tr>))}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        
+        {/* 价格走势 */}
+        {d.priceHistory?.length>0&&(<div style={{marginBottom:18}}>
+          <h4 style={{fontSize:14,fontWeight:600,marginBottom:8}}>📈 近期价格走势（千只均价 ¥）</h4>
+          <div style={{display:"flex",alignItems:"flex-end",gap:12,height:80,padding:"0 8px"}}>
+            {d.priceHistory.map((p,i)=>{
+              const max=Math.max(...d.priceHistory.map(x=>x.price));
+              const h=(p.price/max)*60;
+              return(<div key={i} style={{flex:1,textAlign:"center"}}>
+                <div style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:C.green,fontWeight:600,marginBottom:2}}>{p.price}</div>
+                <div style={{height:h,background:`linear-gradient(180deg,${C.greenAccent},${C.green})`,borderRadius:"4px 4px 0 0",margin:"0 auto",maxWidth:48}}/>
+                <div style={{fontSize:10,color:C.textMute,marginTop:4}}>{p.date}</div>
+              </div>);
+            })}
+          </div>
+        </div>)}
+        
+        {/* 质检记录 */}
+        {d.qualityRecords?.length>0&&(<div style={{marginBottom:18}}>
+          <h4 style={{fontSize:14,fontWeight:600,marginBottom:8}}>🔬 质检记录</h4>
+          {d.qualityRecords.map((q,i)=>(<div key={i} style={{display:"flex",gap:12,alignItems:"center",padding:"7px 12px",borderRadius:7,background:C.bgSoft,marginBottom:4,fontSize:12}}>
+            <span style={{fontFamily:"'DM Mono',monospace",color:C.textMute}}>{q.date}</span>
+            <span style={{fontFamily:"'DM Mono',monospace"}}>{q.batch}</span>
+            <span style={{padding:"1px 8px",borderRadius:3,background:C.greenLight,color:C.green,fontSize:11,fontWeight:600}}>{q.result}</span>
+            <span style={{color:C.textSec,fontSize:11}}>{q.note}</span>
+          </div>))}
+        </div>)}
+        
+        {/* 使用项目 */}
+        {d.usedInProjects?.length>0&&(<div style={{marginBottom:8}}>
+          <h4 style={{fontSize:14,fontWeight:600,marginBottom:8}}>📁 已用于项目</h4>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {d.usedInProjects.map(p=>(<span key={p} style={{padding:"3px 10px",borderRadius:5,background:C.indigoBg,color:C.indigo,fontSize:12,fontFamily:"'DM Mono',monospace",border:`1px solid ${C.indigoBorder}`}}>{p}</span>))}
+          </div>
+        </div>)}
+        
+        </React.Fragment>)}
+      </div>
+    </div>
+  </div>);
+}
+
+function HomePage({onAnalyze,onBOM}){
+  const[partInput,setPartInput]=useState("");
+  const[scenario,setScenario]=useState(null);
+  return(<div style={{maxWidth:680,margin:"40px auto",padding:"0 24px",textAlign:"center",animation:"fadeUp 0.5s ease both"}}>
+    <div style={{marginBottom:20}}>
+      <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+        <rect x="4" y="4" width="48" height="48" rx="12" stroke={C.green} strokeWidth="1.5" fill={C.greenLight}/>
+        <path d="M20 28h16M28 20v16" stroke={C.green} strokeWidth="2" strokeLinecap="round"/>
+        <circle cx="28" cy="28" r="8" stroke={C.greenAccent} strokeWidth="1.2" fill="none" strokeDasharray="3 3"/>
+      </svg>
+    </div>
+    <h2 style={{fontSize:28,fontWeight:700,color:C.green,marginBottom:8}}>元器件替代决策智能体</h2>
+    <p style={{fontSize:14,color:C.textMute,marginBottom:24}}>AI 推荐 → API 验证 → 算法评分 → 决策建议</p>
+    
+    {/* P0: Input with category templates */}
+    <div style={{display:"flex",gap:8,marginBottom:16}}>
+      <input value={partInput} onChange={e=>setPartInput(e.target.value)}
+        placeholder="LM358, OPA2134, STM32F103C8T6..." autoFocus
+        style={{flex:1,padding:"12px 16px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:15,fontFamily:"'DM Mono',monospace",outline:"none"}}/>
+      <button onClick={()=>onAnalyze(partInput.trim()||"STM32F103C8T6",scenario)} style={{padding:"12px 24px",borderRadius:8,border:"none",background:C.green,color:"#fff",fontSize:14,fontWeight:600,cursor:"pointer"}}>开始分析</button>
+    </div>
+    <div style={{fontSize:12,color:C.textMute,marginBottom:24}}>
+      快速试试:&nbsp;
+      {["LM358","TL072","STM32F103C8T6","ADS1256","AMS1117-3.3"].map(ex=>(
+        <button key={ex} onClick={()=>setPartInput(ex)} style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${C.border}`,background:"#fff",color:C.textSec,fontSize:11,fontFamily:"'DM Mono',monospace",cursor:"pointer",marginRight:4}}>{ex}</button>
+      ))}
+    </div>
+    
+    {/* P3: Scenario selector */}
+    <div style={{marginBottom:24}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginBottom:12}}>
+        <span style={{fontSize:13,color:C.textSec,fontWeight:500}}>你的使用场景是？</span>
+        <span className="feature-tag">P3</span>
+        <span style={{fontSize:11,color:C.textMute}}>（选择场景后系统自动调整推荐策略）</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+        {SCENARIOS.map(s=>(
+          <button key={s.id} onClick={()=>setScenario(scenario===s.id?null:s.id)}
+            style={{padding:"10px",borderRadius:8,borderWidth:1,borderStyle:"solid",borderColor:scenario===s.id?C.green:C.border,background:scenario===s.id?C.greenLight:"#fff",cursor:"pointer",textAlign:"center",transition:"all 0.15s"}}>
+            <div style={{fontSize:22,marginBottom:4}}>{s.icon}</div>
+            <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2}}>{s.label}</div>
+            <div style={{fontSize:11,color:C.textMute}}>{s.desc}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+    
+    {/* P8: BOM batch entry */}
+    <div style={{display:"flex",gap:12,justifyContent:"center",marginBottom:24}}>
+      <button onClick={onBOM} style={{padding:"10px 20px",borderRadius:8,border:`1.5px solid ${C.indigoBorder}`,background:C.indigoBg,color:C.indigo,fontSize:14,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+        📋 BOM 批量替代
+        <span className="feature-tag" style={{marginLeft:4}}>P8</span>
+      </button>
+      <button style={{padding:"10px 20px",borderRadius:8,border:`1.5px solid ${C.border}`,background:"#fff",color:C.textSec,fontSize:14,cursor:"pointer"}}>
+        📊 反馈统计
+      </button>
+    </div>
+    
+    {/* Pipeline info */}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,flexWrap:"wrap",fontSize:12,color:C.textSec}}>
+      <span style={{padding:"4px 10px",borderRadius:5,background:C.greenLight,border:`1px solid ${C.greenMid}`,fontWeight:600}}>① 本地数据库优先</span>
+      <span>→</span>
+      <span style={{padding:"4px 10px",borderRadius:5,background:"#EEEDFE",border:"1px solid #AFA9EC"}}>② AI推荐10个候选</span>
+      <span>→</span>
+      <span style={{padding:"4px 10px",borderRadius:5,background:C.indigoBg,border:`1px solid ${C.indigoBorder}`}}>③ 本地库校验比对</span>
+      <span>→</span>
+      <span style={{padding:"4px 10px",borderRadius:5,background:C.amberBg,border:"1px solid #f0dca0"}}>④ 算法评分淘汰</span>
+      <span>→</span>
+      <span style={{padding:"4px 10px",borderRadius:5,background:C.green,color:"#fff",fontWeight:600}}>⑤ Top 5</span>
+    </div>
+    <div style={{marginTop:10,fontSize:11,color:C.textMute}}>
+      💡 本地数据库（ezPLM物料库）未收录时自动降级为联网搜索 · 推荐结果点击型号可查看供应商采购信息
+    </div>
+  </div>);
+}
+
+// Result card (P7 redesigned)
+function ResultCard({rec,index,componentData,onShowDetail}){
+  const[expanded,setExpanded]=useState(index===0); // first card expanded by default for demo
+  return(<div style={{borderRadius:10,border:`1.5px solid ${C.border}`,background:"#fff",overflow:"hidden",marginBottom:14,animation:"fadeUp 0.4s ease both",animationDelay:`${index*0.08}s`}}>
+    
+    {/* Header */}
+    <div style={{padding:"14px 18px",display:"flex",alignItems:"center",gap:14,cursor:"pointer"}} onClick={()=>setExpanded(!expanded)}>
+      <div style={{width:30,height:30,borderRadius:7,background:C.greenLight,color:C.green,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,fontFamily:"'DM Mono',monospace",border:`1px solid ${C.greenMid}`}}>#{rec.rank}</div>
+      <ScoreRing score={rec.overallScore}/>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4}}>
+          <LevelBadge level={rec.replacementLevel}/>
+          <span className="feature-tag">P1</span>
+          <span onClick={e=>{e.stopPropagation();onShowDetail(rec.partNumber,rec)}}
+            style={{fontSize:18,fontWeight:700,fontFamily:"'DM Mono',monospace",color:C.green,cursor:"pointer",textDecoration:"underline",textDecorationStyle:"dotted",textUnderlineOffset:3}}
+            title="点击查看详情和供应商采购信息">{rec.partNumber} 🔍</span>
+          {rec.isPreferred&&<span style={{padding:"2px 7px",borderRadius:4,background:C.amberBg,color:C.amber,fontSize:11,fontWeight:600,border:"1px solid #f0dca0"}}>⭐ 优选</span>}
+          {MOCK_PART_DETAILS[rec.partNumber]?.inPLM&&<span style={{padding:"2px 7px",borderRadius:4,background:C.indigoBg,color:C.indigo,fontSize:11,fontWeight:600,border:`1px solid ${C.indigoBorder}`}}>📦 ezPLM</span>}
+          <LifecycleBadge lc={rec.lifecycle}/>
+          <span className="feature-tag">P9</span>
+        </div>
+        <div style={{fontSize:13,color:C.textMute}}>{rec.manufacturer}</div>
+        <div style={{fontSize:12,color:C.textMute,marginTop:2}}>{rec.description}</div>
+      </div>
+      <div style={{fontSize:16,color:C.textMute,transform:expanded?"rotate(180deg)":"rotate(0)",transition:"transform 0.2s"}}>▾</div>
+    </div>
+    
+    {/* P2: Dimension scores */}
+    <div style={{padding:"0 18px 12px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+        <span style={{fontSize:12,fontWeight:600,color:C.text}}>📊 多维评分</span>
+        <span className="feature-tag">P2</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:"4px 16px"}}>
+        {Object.entries(rec.dimensionScores).map(([k,score])=>(<DimBar key={k} label={DIM_LABELS[k]} score={score}/>))}
+      </div>
+    </div>
+    
+    {/* P7: Decision advice */}
+    <div style={{margin:"0 18px 12px",padding:"10px 12px",borderRadius:8,background:C.bgSoft,border:`1px solid ${C.borderLight}`}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+        <span style={{fontSize:12,fontWeight:600,color:C.text}}>💡 决策建议</span>
+        <span className="feature-tag">P7</span>
+      </div>
+      <div style={{fontSize:12,lineHeight:1.8,color:C.textSec}}>
+        <div>✅ <b>适合场景:</b> {rec.suitableScenarios.join("、")}</div>
+        <div>🌟 <b>主要优势:</b> {rec.advantages}</div>
+        <div>⚠️ <b>主要风险:</b> {rec.risks}</div>
+        <div>📌 <b>建议:</b> {rec.advice}</div>
+      </div>
+    </div>
+    
+    {/* P5: MCU software checks (only show for first MCU result as demo) */}
+    {index===0&&componentData._templateUsed==="MCU"&&(
+      <div>
+        <div style={{padding:"0 18px",display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+          <span className="feature-tag">P5</span>
+        </div>
+        <MCUSoftwarePanel/>
+      </div>
+    )}
+    
+    {/* Procurement */}
+    {Object.keys(rec.procurement||{}).length>0?(
+    <div style={{padding:"0 18px 12px",display:"flex",gap:8}}>
+      {Object.entries(rec.procurement).map(([k,p])=>(
+        <a key={k} href={p.url} target="_blank" style={{flex:1,padding:"8px 12px",borderRadius:7,border:`1px solid ${C.borderLight}`,background:C.bgSoft,textDecoration:"none",color:C.text}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+            <span style={{fontSize:12,fontWeight:700,color:k==="digikey"?"#cc0000":"#004a93"}}>{k==="digikey"?"DigiKey":"Mouser"}</span>
+            <span style={{fontSize:10,fontWeight:600,color:p.stock>0?C.green:"#c0392b"}}>{p.stock>0?`库存 ${p.stock.toLocaleString()}`:"缺货"}</span>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            {p.tiers.map((t,i)=>(<span key={i} style={{fontSize:11,color:C.textSec,fontFamily:"'DM Mono',monospace"}}>{t.qty}+: <b>{t.price}</b></span>))}
+          </div>
+        </a>
+      ))}
+    </div>
+    ):(
+    <div style={{padding:"0 18px 12px"}}>
+      <button onClick={()=>onShowDetail(rec.partNumber,rec)} style={{padding:"6px 14px",borderRadius:7,border:`1px solid ${C.indigoBorder}`,background:C.indigoBg,color:C.indigo,fontSize:12,fontWeight:600,cursor:"pointer"}}>🛒 查看供应商采购信息</button>
+    </div>
+    )}
+    
+    {/* Parameter details (expandable) */}
+    {expanded&&(<div style={{padding:"0 14px 12px"}}>
+      <div style={{padding:"8px 12px",fontSize:12,fontWeight:600,color:C.text,display:"flex",alignItems:"center",gap:6}}>
+        🔬 参数对比详情
+        <span className="feature-tag">P4 证据链</span>
+      </div>
+      {rec.paramScores.map(ps=>{
+        const pm=componentData.parameters.find(p=>p.id===ps.paramId);
+        if(!pm)return null;
+        return(<div key={ps.paramId} style={{display:"grid",gridTemplateColumns:"110px 1fr 40px 110px 1fr",gap:8,alignItems:"center",padding:"6px 10px",borderRadius:6,background:scoreBg(ps.score),fontSize:12,marginBottom:3}}>
+          <div style={{color:C.textSec,fontSize:11}}>{pm.name}</div>
+          <div style={{fontFamily:"'DM Mono',monospace",fontSize:12}}>{ps.value}{ps.unit&&!String(ps.value).includes(ps.unit)?` ${ps.unit}`:""}</div>
+          <div style={{fontWeight:700,color:scoreColor(ps.score),fontFamily:"'DM Mono',monospace",textAlign:"center"}}>{ps.score}</div>
+          <div style={{color:C.textMute,fontSize:11}}>{ps.comment}</div>
+          <div style={{textAlign:"right"}}><SourceTag source={ps.source} confidence={ps.confidence}/></div>
+        </div>);
+      })}
+    </div>)}
+    
+    {/* P10: Feedback panel */}
+    <div style={{display:"flex",alignItems:"center",gap:6,padding:"0 18px 4px"}}>
+      <span className="feature-tag">P10</span>
+    </div>
+    <FeedbackPanel pn={rec.partNumber}/>
+  </div>);
+}
+
+// BOM upload page (P8)
+function BOMPage({onBack}){
+  const[phase,setPhase]=useState("upload");
+  const mockBom=[
+    {row:2,partNumber:"LM358",manufacturer:"TI",reference:"U1",quantity:2,package:"SOIC-8"},
+    {row:3,partNumber:"AMS1117-3.3",manufacturer:"AMS",reference:"U2",quantity:1,package:"SOT-223"},
+    {row:4,partNumber:"STM32F103C8T6",manufacturer:"ST",reference:"U3",quantity:1,package:"LQFP-48"},
+    {row:5,partNumber:"TL072",manufacturer:"TI",reference:"U4",quantity:2,package:"SOIC-8"},
+    {row:6,partNumber:"NE555",manufacturer:"TI",reference:"U5",quantity:1,package:"SOIC-8"},
+  ];
+  const mockResults=[
+    {...mockBom[0],status:"found",topAlternative:"NE5532",topManufacturer:"TI",topScore:96,replacementLevel:"A",pcbChange:"否",softwareChange:"否",alternativeCount:5},
+    {...mockBom[1],status:"found",topAlternative:"RT9013-33GB",topManufacturer:"RICHTEK",topScore:88,replacementLevel:"B",pcbChange:"可能",softwareChange:"-",alternativeCount:4},
+    {...mockBom[2],status:"found",topAlternative:"GD32F103C8T6",topManufacturer:"兆易创新",topScore:92,replacementLevel:"A",pcbChange:"否",softwareChange:"需验证",alternativeCount:6},
+    {...mockBom[3],status:"found",topAlternative:"NJM072",topManufacturer:"JRC",topScore:85,replacementLevel:"B",pcbChange:"否",softwareChange:"否",alternativeCount:3},
+    {...mockBom[4],status:"no_match",topAlternative:"-",topManufacturer:"-",topScore:0,replacementLevel:"-",pcbChange:"-",softwareChange:"-",alternativeCount:0},
+  ];
+  const summary={total:5,found:4,noMatch:1,errors:0,levelA:2,levelB:2,levelC:0,levelDX:0};
+  
+  return(<div style={{maxWidth:1000,margin:"20px auto",padding:"0 24px"}}>
+    <button onClick={onBack} style={{padding:"6px 14px",borderRadius:6,border:`1px solid ${C.border}`,background:"#fff",color:C.textSec,fontSize:13,cursor:"pointer",marginBottom:16}}>← 返回首页</button>
+    <h2 style={{fontSize:22,fontWeight:700,color:C.green,marginBottom:8,display:"flex",alignItems:"center",gap:8}}>📋 BOM 批量替代推荐 <span className="feature-tag">P8</span></h2>
+    <p style={{fontSize:14,color:C.textMute,marginBottom:20}}>上传 BOM 文件，系统将逐个分析并推荐替代料</p>
+    
+    {phase==="upload"&&(<div onClick={()=>setPhase("preview")} style={{border:`2px dashed ${C.greenMid}`,borderRadius:12,padding:"60px 40px",textAlign:"center",cursor:"pointer",background:C.bgSoft}}>
+      <div style={{fontSize:48,marginBottom:12}}>📁</div>
+      <p style={{fontSize:16,fontWeight:600,marginBottom:8}}>点击上传 CSV 文件</p>
+      <p style={{fontSize:13,color:C.textMute}}>支持自动识别列名：型号 / 数量 / 封装 / 厂商 / 位号</p>
+      <p style={{fontSize:13,color:C.textMute,marginTop:4}}>（演示版：点击此处加载示例 BOM）</p>
+    </div>)}
+    
+    {phase==="preview"&&(<div>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:12,fontSize:14,color:C.textSec}}>
+        <span>已解析 5 个物料</span>
+        <div>
+          <button onClick={()=>setPhase("upload")} style={{padding:"6px 16px",borderRadius:6,border:`1px solid ${C.border}`,background:"#fff",color:C.textSec,fontSize:13,cursor:"pointer",marginRight:8}}>重新上传</button>
+          <button onClick={()=>setPhase("results")} style={{padding:"6px 20px",borderRadius:6,border:"none",background:C.green,color:"#fff",fontSize:14,fontWeight:600,cursor:"pointer"}}>🚀 开始批量分析</button>
+        </div>
+      </div>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden"}}>
+        <thead><tr style={{background:C.greenLight}}>{["#","型号","厂商","封装","数量","位号"].map(h=>(<th key={h} style={{padding:"8px 10px",fontWeight:600,color:C.green,textAlign:"left",fontSize:12,borderBottom:`1px solid ${C.greenMid}`}}>{h}</th>))}</tr></thead>
+        <tbody>{mockBom.map((item,i)=>(<tr key={i}>{[i+1,item.partNumber,item.manufacturer,item.package,item.quantity,item.reference].map((v,j)=>(<td key={j} style={{padding:"7px 10px",borderBottom:`1px solid ${C.borderLight}`,fontSize:12,fontFamily:j===1?"'DM Mono',monospace":"inherit",fontWeight:j===1?600:400}}>{v}</td>))}</tr>))}</tbody>
+      </table>
+    </div>)}
+    
+    {phase==="results"&&(<div>
+      <div className="summary-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
+        {[
+          ["总物料",summary.total,C.text,C.border],
+          ["已找到替代",summary.found,C.green,C.green],
+          ["无匹配",summary.noMatch,C.amber,C.amber],
+          ["查询失败",summary.errors,"#c0392b","#c0392b"],
+        ].map(([l,v,c,bc])=>(<div key={l} style={{padding:16,borderRadius:8,border:`1.5px solid ${bc}30`,background:"#fff",textAlign:"center"}}><div style={{fontSize:28,fontWeight:700,fontFamily:"'DM Mono',monospace",color:c,marginBottom:4}}>{v}</div><div style={{fontSize:13,color:C.textSec}}>{l}</div></div>))}
+      </div>
+      <div style={{display:"flex",gap:8,marginBottom:16}}>
+        <button style={{padding:"6px 14px",borderRadius:6,border:`1px solid ${C.border}`,background:"#fff",fontSize:12,cursor:"pointer"}}>📊 导出 CSV</button>
+        <button style={{padding:"6px 14px",borderRadius:6,border:`1px solid ${C.border}`,background:"#fff",fontSize:12,cursor:"pointer"}}>📄 导出 Markdown</button>
+        <button onClick={()=>setPhase("upload")} style={{padding:"6px 14px",borderRadius:6,border:`1px solid ${C.border}`,background:"#fff",fontSize:12,cursor:"pointer",marginLeft:"auto"}}>重新上传</button>
+      </div>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden"}}>
+        <thead><tr style={{background:C.greenLight}}>{["原型号","原厂商","推荐替代","替代厂商","等级","分数","改PCB","改软件","状态"].map(h=>(<th key={h} style={{padding:"8px 10px",fontWeight:600,color:C.green,textAlign:"left",fontSize:11,borderBottom:`1px solid ${C.greenMid}`,whiteSpace:"nowrap"}}>{h}</th>))}</tr></thead>
+        <tbody>{mockResults.map((r,i)=>(<tr key={i} style={i%2?{background:C.bgSoft}:{}}>
+          <td style={{padding:"7px 10px",fontFamily:"'DM Mono',monospace",fontWeight:600,fontSize:12}}>{r.partNumber}</td>
+          <td style={{padding:"7px 10px",fontSize:12}}>{r.manufacturer}</td>
+          <td style={{padding:"7px 10px",fontFamily:"'DM Mono',monospace",fontWeight:600,color:C.green,fontSize:12}}>{r.topAlternative}</td>
+          <td style={{padding:"7px 10px",fontSize:12}}>{r.topManufacturer}</td>
+          <td style={{padding:"7px 10px"}}>{r.replacementLevel!=="-"?<span style={{padding:"2px 8px",borderRadius:4,color:"#fff",fontSize:11,fontWeight:700,background:{A:C.green,B:C.greenAccent,C:"#c2610c",D:C.amber,X:"#c0392b"}[r.replacementLevel]}}>{r.replacementLevel}</span>:"-"}</td>
+          <td style={{padding:"7px 10px",fontWeight:600,color:scoreColor(r.topScore||50),fontSize:12}}>{r.topScore||"-"}</td>
+          <td style={{padding:"7px 10px",fontSize:12}}>{r.pcbChange}</td>
+          <td style={{padding:"7px 10px",fontSize:12}}>{r.softwareChange}</td>
+          <td style={{padding:"7px 10px",fontSize:12,color:r.status==="found"?C.green:"#c0392b"}}>{r.status==="found"?"✅":"⚠️"}</td>
+        </tr>))}</tbody>
+      </table>
+    </div>)}
+  </div>);
+}
+
+// Result page
+// 将 /api/v2/recommend 响应适配为卡片渲染所需结构
+// （补齐 mock 卡片才有的展示字段，缺失时给安全默认值）
+function adaptLive(d){
+  const lc={status:"unknown",label:"未知",icon:"⚪"};
+  const recommendations=(d.recommendations||[]).map((r,i)=>({
+    rank:i+1,
+    partNumber:r.partNumber,
+    manufacturer:r.manufacturer||"",
+    description:r.description||"",
+    isPreferred:!!r.isPreferred,
+    overallScore:r.overallScore,
+    replacementLevel:r.replacementLevel||{level:"?",label:"",color:"#8aa698"},
+    dimensionScores:r.dimensionScores||{hardware:0,functional:0,electrical:0,supply:0,risk:0},
+    suitableScenarios:r.suitableScenarios||[],
+    advantages:r.advantages||"—",
+    risks:r.risks||"—",
+    advice:r.advice||(r.replacementLevel?.level==="A"?"可直接替换，建议小批量验证":"建议样板验证后再批量使用"),
+    paramScores:r.paramScores||[],
+    lifecycle:lc,
+    procurement:{},   // 实时模式采购信息走详情弹窗 /api/v2/part-detail
+    inPLM:!!r.inPLM,
+  }));
+  return { original:d.original, recommendations, pipeline:d.pipeline, eliminated:d.eliminated||[] };
+}
+
+function ResultPage({partNumber,scenario,onBack}){
+  const[detailPN,setDetailPN]=useState(null);
+  const[detailRec,setDetailRec]=useState(null);
+  const[live,setLive]=useState(null);   // null=未尝试, {original,recommendations,pipeline}=实时, false=回退mock
+  const[loading,setLoading]=useState(false);
+  const[note,setNote]=useState("");
+
+  useEffect(()=>{
+    let cancelled=false;
+    (async()=>{
+      setLoading(true);setNote("");
+      try{
+        const r=await fetch("/api/v2/recommend",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({partNumber,mode:scenario==="domestic"?"domestic":scenario==="costDown"?"lowCost":scenario==="shortage"?"pin2pin":"funcCompat",scenario})});
+        if(!r.ok)throw new Error("api "+r.status);
+        const d=await r.json();
+        if(cancelled)return;
+        if(d.recommendations?.length){
+          setLive(adaptLive(d));
+        }else{ setLive(false);setNote("实时查询无结果，显示演示数据"); }
+      }catch(e){
+        if(cancelled)return;
+        setLive(false);
+        setNote("后端未部署或未配置 Gemini，显示演示数据");
+      }finally{ if(!cancelled)setLoading(false); }
+    })();
+    return()=>{cancelled=true};
+  },[partNumber,scenario]);
+
+  // 实时数据时用实时，否则回退到内置 mock（保证演示永远有内容）
+  const usingLive=live&&live!==false;
+  const comp=usingLive?live.original:MOCK_MCU;
+  const recs=usingLive?live.recommendations:MOCK_RECS;
+  const pipe=usingLive?live.pipeline:null;
+
+  if(loading)return(<div style={{maxWidth:1100,margin:"60px auto",textAlign:"center",color:C.textMute}}>
+    <div style={{width:36,height:36,border:`3px solid ${C.borderLight}`,borderTopColor:C.green,borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 14px"}}/>
+    正在分析 {partNumber}（本地库查询 → AI推荐10个 → 校验评分 → Top5）...
+  </div>);
+
+  return(<div style={{maxWidth:1100,margin:"20px auto",padding:"0 24px",animation:"fadeUp 0.4s ease both"}}>
+    <button onClick={onBack} style={{padding:"6px 14px",borderRadius:6,border:`1px solid ${C.border}`,background:"#fff",color:C.textSec,fontSize:13,cursor:"pointer",marginBottom:16}}>← 返回首页</button>
+    {note&&<div style={{padding:"7px 14px",borderRadius:7,background:C.amberBg,border:"1px solid #f0dca0",color:"#854f0b",fontSize:12,marginBottom:12}}>ℹ️ {note}</div>}
+    {/* Component info bar */}
+    <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 18px",borderRadius:10,border:`1.5px solid ${C.border}`,background:"#fff",marginBottom:14}}>
+      <div style={{padding:"3px 10px",borderRadius:5,background:C.greenLight,color:C.green,fontSize:12,fontWeight:600,border:`1px solid ${C.greenMid}`}}>{comp.category||"元器件"}</div>
+      <span className="feature-tag">P0 模板</span>
+      <div style={{flex:1}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <span style={{fontSize:18,fontWeight:700,fontFamily:"'DM Mono',monospace",color:C.green}}>{comp.partNumber}</span>
+          {(comp._dataPath==="local_db"||comp.internalPN)&&<span style={{padding:"2px 8px",borderRadius:4,background:C.greenLight,color:C.green,fontSize:11,fontWeight:600,border:`1px solid ${C.greenMid}`}}>📦 本地数据库命中</span>}
+          {comp._dataPath==="ai_search"&&<span style={{padding:"2px 8px",borderRadius:4,background:C.amberBg,color:C.amber,fontSize:11,fontWeight:600,border:"1px solid #f0dca0"}}>🌐 联网搜索</span>}
+          {comp.internalPN&&<span style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:C.textMute}}>{comp.internalPN}</span>}
+        </div>
+        <div style={{fontSize:13,color:C.textMute}}>{comp.manufacturer} · {comp.description}</div>
+      </div>
+      {scenario&&(<div style={{padding:"4px 10px",borderRadius:5,background:C.indigoBg,color:C.indigo,fontSize:12,fontWeight:500,border:`1px solid ${C.indigoBorder}`}}>
+        {SCENARIOS.find(s=>s.id===scenario)?.icon} {SCENARIOS.find(s=>s.id===scenario)?.label}
+      </div>)}
+    </div>
+    
+    {/* v2.1: Local-first pipeline flow */}
+    <div style={{padding:"12px 16px",borderRadius:10,border:`1.5px solid ${C.indigoBorder}`,background:C.indigoBg,marginBottom:14}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+        <span style={{fontSize:13,fontWeight:600,color:C.indigo}}>🔀 v2.1 推荐流程</span>
+        <span style={{fontSize:11,color:C.indigo,opacity:0.7}}>本地优先 · 10选5校正</span>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",fontSize:12}}>
+        <span style={{padding:"4px 10px",borderRadius:5,background:"#fff",border:`1px solid ${C.greenMid}`,color:C.green,fontWeight:500}}>① 本地库查询原始参数 ✓</span>
+        <span style={{color:C.indigo}}>→</span>
+        <span style={{padding:"4px 10px",borderRadius:5,background:"#fff",border:"1px solid #AFA9EC",color:"#534AB7",fontWeight:500}}>② AI推荐 <b>10</b> 个候选</span>
+        <span style={{color:C.indigo}}>→</span>
+        <span style={{padding:"4px 10px",borderRadius:5,background:"#fff",border:`1px solid ${C.greenMid}`,color:C.green,fontWeight:500}}>③ 本地库校验 <b>6</b> 命中 / API <b>4</b></span>
+        <span style={{color:C.indigo}}>→</span>
+        <span style={{padding:"4px 10px",borderRadius:5,background:"#fff",border:"1px solid #f0dca0",color:C.amber,fontWeight:500}}>④ 算法评分 · 淘汰 <b>5</b> 个</span>
+        <span style={{color:C.indigo}}>→</span>
+        <span style={{padding:"4px 10px",borderRadius:5,background:C.green,color:"#fff",fontWeight:600}}>⑤ 输出 Top 5</span>
+      </div>
+      <div style={{marginTop:8,fontSize:11,color:C.indigo,opacity:0.8}}>
+        {pipe
+          ?`⏱ 用时 ${(pipe.executionTimeMs/1000).toFixed(1)}s · 本地库命中 ${pipe.localDbHits} · AI查询 ${pipe.aiLookups} · AI推荐${pipe.candidatesReceived}个 → 校验${pipe.candidatesVerified} → 淘汰${pipe.candidatesEliminated} → Top${pipe.finalCount}`
+          :"⏱ 用时 6.2s · 本地库命中节省 4 次联网查询 · 淘汰原因: 3个分数低于40分, 1个封装硬约束不满足, 1个数据查询失败"}
+      </div>
+    </div>
+    
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+      <h3 style={{fontSize:16,fontWeight:600}}>推荐结果 <span style={{fontSize:13,color:C.textMute,fontWeight:400}}>· {usingLive?`Top ${recs.length}`:"演示 Top 3"} · 点击型号查看详情</span></h3>
+      <div style={{display:"flex",gap:8}}>
+        <button style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${C.border}`,background:"#fff",fontSize:12,cursor:"pointer"}}>📄 MD</button>
+        <button style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${C.border}`,background:"#fff",fontSize:12,cursor:"pointer"}}>📊 CSV</button>
+      </div>
+    </div>
+    
+    {recs.map((rec,i)=>(<ResultCard key={rec.partNumber} rec={rec} index={i} componentData={comp} onShowDetail={(pn,r)=>{setDetailPN(pn);setDetailRec(r)}}/>))}
+    
+    {/* Eliminated candidates (10→5 filtering) */}
+    <details style={{marginTop:8,borderRadius:10,border:`1px solid ${C.borderLight}`,background:"#fff",overflow:"hidden"}}>
+      <summary style={{padding:"12px 16px",cursor:"pointer",fontSize:13,color:C.textSec,fontWeight:500}}>🚫 被淘汰的候选（{usingLive?(live.eliminated?.length||0):5}个）— 10选5校正过程</summary>
+      <div style={{padding:"0 16px 12px"}}>
+        {(usingLive?(live.eliminated||[]).map(e=>({pn:e.partNumber,mfr:e.manufacturer||"",reason:e.reason,score:null})):[
+          {pn:"HK32F103C8T6",mfr:"航顺芯片",reason:"综合匹配度过低 (38分 < 40分)",score:38},
+          {pn:"CS32F103C8T6",mfr:"芯海科技",reason:"综合匹配度过低 (35分 < 40分)",score:35},
+          {pn:"MM32F103C8T6",mfr:"灵动微电子",reason:"综合匹配度过低 (39分 < 40分)",score:39},
+          {pn:"AT32F403CGT7",mfr:"雅特力",reason:"封装不满足硬约束 (LQFP-64 ≠ LQFP-48)",score:null},
+          {pn:"N32G430C8T6",mfr:"国民技术",reason:"本地库未收录且联网查询失败",score:null},
+        ]).map((e,i)=>(<div key={i} style={{display:"flex",gap:12,alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${C.borderLight}`,fontSize:12}}>
+          <span style={{fontFamily:"'DM Mono',monospace",fontWeight:600,color:C.textSec,minWidth:130}}>{e.pn}</span>
+          <span style={{color:C.textMute,minWidth:80}}>{e.mfr}</span>
+          {e.score!=null&&<span style={{fontFamily:"'DM Mono',monospace",fontWeight:700,color:"#c0392b",minWidth:36}}>{e.score}分</span>}
+          <span style={{color:"#c0392b",flex:1}}>{e.reason}</span>
+        </div>))}
+      </div>
+    </details>
+    
+    {/* Detail modal */}
+    {detailPN&&<PartDetailModal pn={detailPN} rec={detailRec} onClose={()=>{setDetailPN(null);setDetailRec(null)}}/>}
+  </div>);
+}
+
+// 后端状态指示器：部署到 Vercel 后探测 /api/health
+function BackendStatus(){
+  const[st,setSt]=useState(null);
+  useEffect(()=>{
+    fetch("/api/health").then(r=>r.ok?r.json():null).then(d=>setSt(d)).catch(()=>setSt(false));
+  },[]);
+  if(st===null)return <span>检测后端中…</span>;
+  if(!st)return <span>前端演示模式 · 使用内置 mock 数据（后端未部署）</span>;
+  const g=st.config?.geminiConfigured;
+  return <span>
+    后端已连接 · {st.config?.mode}
+    {g?" · Gemini已配置 ✓":" · ⚠ 未配置 GEMINI_API_KEY（推荐功能不可用）"}
+  </span>;
+}
+
+// ═══════════════════════════════════════
+// MAIN APP
+// ═══════════════════════════════════════
+function App(){
+  const[page,setPage]=useState("home"); // home | result | bom
+  const[scenario,setScenario]=useState(null);
+  const[queryPN,setQueryPN]=useState("STM32F103C8T6");
+  
+  return(<React.Fragment>
+    <div className="demo-banner">
+      <div><b>🎨 AltPart AI v2.1</b> · <BackendStatus /></div>
+      <nav className="nav-tabs" style={{display:"flex",gap:4}}>
+        {[["home","首页"],["result","推荐结果"],["bom","BOM 批量"]].map(([k,l])=>(
+          <button key={k} onClick={()=>setPage(k)} style={{padding:"3px 10px",borderRadius:4,border:"none",background:page===k?"#854f0b":"transparent",color:page===k?"#fff":"#854f0b",fontSize:11,fontWeight:600,cursor:"pointer"}}>{l}</button>
+        ))}
+      </nav>
+    </div>
+    
+    <header style={{background:"#fff",borderBottom:`1px solid ${C.border}`,padding:"10px 24px"}}>
+      <div style={{maxWidth:1260,margin:"0 auto",display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:36,height:36,borderRadius:8,background:C.green,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="#fff" strokeWidth="1.8" fill="none"/><path d="M12 7v10M7 9.5l5 3 5-3" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        </div>
+        <div>
+          <div style={{fontSize:17,fontWeight:700,color:C.green}}>AltPart AI</div>
+          <div style={{fontSize:11,color:C.textMute}}>元器件替代决策智能体 · v2.0</div>
+        </div>
+      </div>
+    </header>
+    
+    <main style={{flex:1,minHeight:"calc(100vh - 90px)"}}>
+      {page==="home"&&<HomePage onAnalyze={(pn,s)=>{setQueryPN(pn);setScenario(s);setPage("result")}} onBOM={()=>setPage("bom")}/>}
+      {page==="result"&&<ResultPage partNumber={queryPN} scenario={scenario} onBack={()=>setPage("home")}/>}
+      {page==="bom"&&<BOMPage onBack={()=>setPage("home")}/>}
+    </main>
+    
+    <footer style={{textAlign:"center",padding:"16px 24px",borderTop:`1px solid ${C.borderLight}`,fontSize:12,color:C.textMute,background:"#fff"}}>
+      AltPart AI v2.0 演示版 · 实际效果以集成后为准
+    </footer>
+  </React.Fragment>);
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
