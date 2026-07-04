@@ -1,6 +1,6 @@
 // gemini.js — v2.2: 真实 Gemini API 接入
 // 改进点：
-//  - 可配置模型（GEMINI_MODEL 环境变量，默认 gemini-2.0-flash）
+//  - 可配置模型（GEMINI_MODEL 环境变量，默认 gemini-2.5-flash）
 //  - 调用重试（指数退避，应对 429/503）
 //  - 超时控制（避免 Serverless 函数挂死）
 //  - 标注 AI 来源（GPT诊断 #6：AI 数据低可信，由 scoring 显著降权）
@@ -8,8 +8,8 @@
 
 const { matchCategory, buildParamGuide, guessCategory } = require("./category-templates");
 
-// 默认用稳定可用的 gemini-2.0-flash；可通过环境变量切换到 2.5/3.x
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+// 默认用稳定可用的 gemini-2.5-flash；可通过环境变量切换到 2.5/3.x
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const CALL_TIMEOUT_MS = 25000;
 const MAX_RETRIES = 3;
