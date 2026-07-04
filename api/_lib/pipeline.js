@@ -52,12 +52,14 @@ async function resolveOriginalPart(partNumber, onProgress) {
 /**
  * Step 2-4: 完整推荐流程
  */
-async function runPipeline({ partNumber, mode, scenario, preferredManufacturers = [], constraints = {}, priorityOrder, onProgress }) {
+async function runPipeline({ partNumber, mode, scenario, preferredManufacturers = [], constraints = {}, priorityOrder, originalData, onProgress }) {
   const startTime = Date.now();
   const stats = { localDbHits: 0, apiHits: 0, aiLookups: 0 };
 
   // ─── Step 1: 解析原始器件（本地优先）───
-  const original = await resolveOriginalPart(partNumber, onProgress);
+  const original = (originalData?.parameters?.length)
+    ? originalData                                     // 两段式流程：前端已通过 /analyze 拿到参数，直接复用
+    : await resolveOriginalPart(partNumber, onProgress);
   const params = original.parameters;
   const order = priorityOrder || params.map(p => p.id);
 
@@ -77,7 +79,7 @@ async function runPipeline({ partNumber, mode, scenario, preferredManufacturers 
         aiEliminated = aiResult.eliminated || [];
         if (candidatePNs.length) break;
       } catch (e) { console.warn(`[Pipeline] Candidates attempt ${attempt + 1} failed:`, e.message); }
-      if (attempt < 2) await new Promise(r => setTimeout(r, 1500));
+      if (attempt < 1) await new Promise(r => setTimeout(r, 800));
     }
     if (candidatePNs.length) cache.set(candCk, { candidates: candidatePNs, eliminated: aiEliminated }, 86400);
   }

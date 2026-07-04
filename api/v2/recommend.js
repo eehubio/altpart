@@ -3,7 +3,7 @@ const { withCors } = require("../_lib/_cors");
 const { runPipeline } = require("../_lib/pipeline");
 
 module.exports = withCors(async (req, res) => {
-  const { partNumber, mode = "funcCompat", scenario, preferredManufacturers, constraints, priorityOrder } = req.body || {};
+  const { partNumber, mode = "funcCompat", scenario, preferredManufacturers, constraints, priorityOrder, original } = req.body || {};
   if (!partNumber) { res.status(400).json({ error: "partNumber required" }); return; }
 
   try {
@@ -12,6 +12,7 @@ module.exports = withCors(async (req, res) => {
       preferredManufacturers: preferredManufacturers || [],
       constraints: constraints || {},
       priorityOrder,
+      originalData: original,
     });
     res.status(200).json({ success: true, ...result });
   } catch (e) {
