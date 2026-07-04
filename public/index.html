@@ -302,7 +302,27 @@ function ParamRow({p,index,con,onSetCon,onDragStart,onDragOver,onDrop,dragging})
 }
 
 // ═══ 结果卡片 ═══
-function ResultCard({rec,index,onShowDetail}){
+function MarketStrip({pn,market}){
+  if(market===null)return(<div style={{padding:"6px 10px",borderRadius:7,background:C.bgSoft,border:`1px dashed ${C.borderLight}`,fontSize:11,color:C.textMute}}>💰 正在查询市场行情…</div>);
+  const m=market?.[pn];
+  if(!m||m.source==="unavailable")return null;
+  const stockColor={"充足":C.green,"一般":C.amber,"紧张":"#c2610c","停产风险":"#c0392b"}[m.stock]||C.textMute;
+  return(<div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",padding:"7px 10px",borderRadius:7,background:C.bgSoft,border:`1px solid ${C.borderLight}`,fontSize:12}}>
+    <span style={{fontWeight:600,color:C.textSec}}>💰 市场行情</span>
+    {m.priceUSD1!=null&&<span style={{fontFamily:"'DM Mono',monospace"}}>1片≈<b style={{color:C.green}}>${m.priceUSD1}</b></span>}
+    {m.priceUSD100!=null&&<span style={{fontFamily:"'DM Mono',monospace"}}>100片≈<b style={{color:C.green}}>${m.priceUSD100}</b></span>}
+    <span>供货: <b style={{color:stockColor}}>{m.stock}</b></span>
+    {m.channels?.length>0&&<span style={{color:C.textMute}}>渠道: {m.channels.join("、")}</span>}
+    {m.note&&<span style={{color:C.textMute}}>{m.note}</span>}
+    <span style={{marginLeft:"auto",fontSize:10,padding:"1px 6px",borderRadius:3,
+      background:m.source==="supplier_api"?C.greenLight:C.amberBg,
+      color:m.source==="supplier_api"?C.green:C.amber,
+      border:`1px solid ${m.source==="supplier_api"?C.greenMid:"#f0dca0"}`}}>
+      {m.source==="supplier_api"?"供应商API ✓":"AI估算 · 仅供参考 ⚠"}</span>
+  </div>);
+}
+
+function ResultCard({rec,index,market,onShowDetail}){
   const[expanded,setExpanded]=useState(index===0);
   return(<div style={{borderRadius:10,border:`1.5px solid ${C.border}`,background:"#fff",overflow:"hidden",marginBottom:14,animation:"fadeUp 0.4s ease both",animationDelay:`${index*0.06}s`}}>
     <div style={{padding:"14px 18px",display:"flex",alignItems:"center",gap:14,cursor:"pointer"}} onClick={()=>setExpanded(!expanded)}>
@@ -333,6 +353,7 @@ function ResultCard({rec,index,onShowDetail}){
       </div>
       {rec.replacementLevel?.level==="P2"&&<div style={{marginTop:6,fontSize:11,color:"#854f0b",background:C.amberBg,border:"1px solid #f0dca0",borderRadius:6,padding:"5px 8px"}}>⚠ 参数高度匹配，但引脚映射尚未验证 — 需人工核对引脚后方可判定"可直接替换"</div>}
       {rec.replacementLevel?.level==="P0"&&<div style={{marginTop:6,fontSize:11,color:"#7a5b00",background:"#f5f0e0",border:"1px solid #e0d4a0",borderRadius:6,padding:"5px 8px"}}>ℹ 证据覆盖率过低，数据不足以判断兼容性</div>}
+      <div style={{marginTop:8}}><MarketStrip pn={rec.partNumber} market={market}/></div>
     </div>)}
     {expanded&&(rec.paramScores||[]).length>0&&(<div style={{padding:"0 14px 12px"}}>
       <div style={{padding:"6px 10px",fontSize:12,fontWeight:600,color:C.text}}>🔬 参数对比详情</div>
@@ -385,6 +406,7 @@ function Workbench({original,demoNote,onBack}){
   const[view,setView]=useState("cards");
   const[detailPN,setDetailPN]=useState(null);
   const[detailRec,setDetailRec]=useState(null);
+  const[market,setMarket]=useState(null);   // {PN: {priceUSD1,stock,channels,source}}
   const[dragging,setDragging]=useState(null);
   const dragFrom=useRef(null);
 
@@ -401,6 +423,16 @@ function Workbench({original,demoNote,onBack}){
   const addMfr=()=>{const v=mfrInput.trim();if(v&&!mfrs.includes(v)){setMfrs([...mfrs,v]);}setMfrInput("");};
   const mfrSuggest=mfrInput?POPULAR_MFRS.filter(m=>m.toLowerCase().includes(mfrInput.toLowerCase())&&!mfrs.includes(m)).slice(0,5):[];
 
+  const fetchMarket=async(pns)=>{
+    setMarket(null);
+    try{
+      const r=await fetch("/api/v2/market",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({partNumbers:pns})});
+      const d=await r.json().catch(()=>null);
+      if(d&&d.success)setMarket(d.parts||{});
+      else setMarket({});
+    }catch(e){setMarket({});}
+  };
+
   const runRecommend=async()=>{
     setPhase("loading");setNote("");
     try{
@@ -410,6 +442,7 @@ function Workbench({original,demoNote,onBack}){
       const d=await r.json().catch(()=>null);
       if(d&&d.success&&d.recommendations?.length){
         setResult(d);setPhase("done");
+        fetchMarket(d.recommendations.map(x=>x.partNumber));   // 异步拉行情，不阻塞结果展示
       }else if(original.partNumber==="STM32F103C8T6"&&original._dataPath==="demo"){
         setResult({recommendations:MOCK_RECS,eliminated:[]});
         setNote("演示模式数据");setPhase("done");
@@ -478,12 +511,19 @@ function Workbench({original,demoNote,onBack}){
       <div style={{borderRadius:12,border:`1.5px solid ${C.border}`,background:"#fff",padding:"14px 16px",marginBottom:14}}>
         <div style={{fontSize:14,fontWeight:700,marginBottom:10}}>🔀 替代模式</div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {SUB_MODES.map(m=>(<button key={m.id} onClick={()=>setMode(m.id)}
-            style={{padding:"9px 12px",borderRadius:8,borderWidth:1.5,borderStyle:"solid",borderColor:mode===m.id?C.green:C.border,background:mode===m.id?C.greenLight:"#fff",cursor:"pointer",textAlign:"left"}}>
-            <div style={{fontSize:13,fontWeight:600,color:C.text}}>{m.label}</div>
-            <div style={{fontSize:10,color:C.textMute}}>{m.desc}</div>
-          </button>))}
+          {SUB_MODES.map(m=>{
+            const disabled=m.id==="pin2pin"&&original._pkgConfirmed===false;
+            return(<button key={m.id} disabled={disabled} onClick={()=>!disabled&&setMode(m.id)}
+              title={disabled?"封装未限定，无法评估引脚兼容性。请返回选择具体封装型号后使用":""}
+              style={{padding:"9px 12px",borderRadius:8,borderWidth:1.5,borderStyle:"solid",
+                borderColor:disabled?"#e0e0e0":mode===m.id?C.green:C.border,
+                background:disabled?"#f5f5f5":mode===m.id?C.greenLight:"#fff",
+                cursor:disabled?"not-allowed":"pointer",textAlign:"left",opacity:disabled?0.55:1}}>
+              <div style={{fontSize:13,fontWeight:600,color:disabled?C.textMute:C.text}}>{m.label}{disabled&&" 🔒"}</div>
+              <div style={{fontSize:10,color:C.textMute}}>{disabled?"封装未限定，不可用":m.desc}</div>
+            </button>);})}
         </div>
+        {original._pkgConfirmed===false&&<div style={{marginTop:8,fontSize:11,color:C.textMute}}>💡 未限定封装时无法做 Pin-to-Pin 判定。如需该模式，请重新搜索并选择具体封装型号。</div>}
       </div>
 
       <button onClick={runRecommend} disabled={phase==="loading"}
@@ -518,7 +558,7 @@ function Workbench({original,demoNote,onBack}){
           </div>
         </div>
         {view==="cards"
-          ?result.recommendations.map((rec,i)=><ResultCard key={rec.partNumber} rec={rec} index={i} onShowDetail={(pn,r)=>{setDetailPN(pn);setDetailRec(r)}}/>)
+          ?result.recommendations.map((rec,i)=><ResultCard key={rec.partNumber} rec={rec} index={i} market={market} onShowDetail={(pn,r)=>{setDetailPN(pn);setDetailRec(r)}}/>)
           :<CompareTable original={original} recs={result.recommendations}/>}
         {(result.eliminated||[]).length>0&&(<details style={{marginTop:12,borderRadius:10,border:`1px solid ${C.borderLight}`,background:"#fff"}}>
           <summary style={{padding:"11px 16px",cursor:"pointer",fontSize:13,color:C.textSec,fontWeight:500}}>🚫 被淘汰的候选（{result.eliminated.length}个）</summary>
@@ -553,10 +593,10 @@ function App(){
         if((d.original.variants||[]).length>=2){
           setVariantBase(d.original);setPage("variants");   // 基础型号有多个封装变体 → 先让用户确认
         }else{
-          setOriginal(d.original);setPage("workbench");
+          setOriginal({...d.original,_pkgConfirmed:true});setPage("workbench");
         }
       }else if(pn.toUpperCase()==="STM32F103C8T6"){
-        setOriginal(MOCK_ORIGINAL);setDemoNote("演示模式");setPage("workbench");
+        setOriginal({...MOCK_ORIGINAL,_pkgConfirmed:true});setDemoNote("演示模式");setPage("workbench");
       }else{
         setHomeErr(d&&d.success===false?`参数查询失败：${d.error||"未知错误"}`:"参数查询失败，请稍后重试");
       }
@@ -586,10 +626,10 @@ function App(){
           const params=(variantBase.parameters||[]).map(p=>
             (p.name.includes("封装")||String(p.nameEn||"").toLowerCase().includes("package"))&&v.package
               ?{...p,value:v.package}:p);
-          setOriginal({...variantBase,partNumber:v.pn,parameters:params,variants:[]});
+          setOriginal({...variantBase,partNumber:v.pn,parameters:params,variants:[],_pkgConfirmed:true});
           setPage("workbench");
         }}
-        onSkip={()=>{setOriginal({...variantBase,variants:[]});setPage("workbench")}}
+        onSkip={()=>{setOriginal({...variantBase,variants:[],_pkgConfirmed:false});setPage("workbench")}}
         onBack={()=>setPage("home")}/>}
       {page==="workbench"&&original&&<Workbench original={original} demoNote={demoNote} onBack={()=>setPage("home")}/>}
     </main>
