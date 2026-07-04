@@ -108,7 +108,7 @@ async function analyzeComponent(partNumber) {
   const template = guessed ? matchCategory(guessed) : null;
   const paramGuide = buildParamGuide(template);
 
-  const sys = `你是资深电子元器件工程师。请联网搜索"${partNumber} datasheet"，提取真实参数。
+  const sys = `你是资深电子元器件工程师。请根据你对 "${partNumber}" 的了解，提取真实参数。
 严禁凭记忆编造数值。找不到的参数填 "N/A"。只返回 JSON，value 不含单位（单位放 unit）。
 
 ${paramGuide}
@@ -119,7 +119,7 @@ ${paramGuide}
 
 ⚠ 参数必须严格属于该品类：MCU 不能出现运放参数，运放不能出现 MCU 参数。`;
 
-  const raw = await callGemini(sys, `搜索并分析：${partNumber}`, 4096);
+  const raw = await callGemini(sys, `分析器件：${partNumber}`, 4096, false);
   const result = repairJSON(raw);
 
   // 标注数据来源（AI 搜索 → 低可信，scoring 会降权）
