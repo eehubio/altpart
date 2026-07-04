@@ -199,6 +199,34 @@ function PartDetailModal({pn,rec,onClose}){
   </div>);
 }
 
+// ═══ 封装变体确认页 ═══
+function VariantPicker({base,onPick,onSkip,onBack}){
+  return(<div style={{maxWidth:620,margin:"50px auto",padding:"0 24px",animation:"fadeUp 0.4s ease both"}}>
+    <div style={{textAlign:"center",marginBottom:24}}>
+      <div style={{fontSize:20,fontWeight:700,color:C.text,marginBottom:6}}>
+        <span style={{fontFamily:"'DM Mono',monospace",color:C.green}}>{base.partNumber}</span> 存在多个封装/订货变体
+      </div>
+      <div style={{fontSize:13,color:C.textMute}}>请确认具体型号，封装信息将用于替代匹配</div>
+    </div>
+    {(base.variants||[]).map((v,i)=>(
+      <div key={i} onClick={()=>onPick(v)}
+        style={{display:"flex",alignItems:"center",gap:14,padding:"14px 18px",borderRadius:10,border:`1.5px solid ${C.border}`,background:"#fff",marginBottom:10,cursor:"pointer",transition:"all 0.15s"}}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor=C.green;e.currentTarget.style.background=C.greenLight}}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.background="#fff"}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:16,fontWeight:700,fontFamily:"'DM Mono',monospace",color:C.green}}>{v.pn}</div>
+          {v.note&&<div style={{fontSize:12,color:C.textMute,marginTop:2}}>{v.note}</div>}
+        </div>
+        {v.package&&<span style={{padding:"4px 12px",borderRadius:6,background:C.indigoBg,color:C.indigo,fontSize:13,fontWeight:600,border:`1px solid ${C.indigoBorder}`,fontFamily:"'DM Mono',monospace"}}>{v.package}</span>}
+        <span style={{color:C.textMute}}>→</span>
+      </div>))}
+    <div style={{display:"flex",gap:10,marginTop:16}}>
+      <button onClick={onSkip} style={{flex:1,padding:"11px",borderRadius:8,border:`1px solid ${C.border}`,background:"#fff",color:C.textSec,fontSize:13,cursor:"pointer"}}>跳过，直接使用 {base.partNumber}（不限定封装）</button>
+      <button onClick={onBack} style={{padding:"11px 20px",borderRadius:8,border:`1px solid ${C.border}`,background:"#fff",color:C.textMute,fontSize:13,cursor:"pointer"}}>← 返回</button>
+    </div>
+  </div>);
+}
+
 // ═══ 首页 ═══
 function HomePage({onSubmit,busy,err}){
   const[pn,setPn]=useState("");
@@ -514,6 +542,7 @@ function App(){
   const[busy,setBusy]=useState(false);
   const[demoNote,setDemoNote]=useState("");
   const[homeErr,setHomeErr]=useState("");
+  const[variantBase,setVariantBase]=useState(null);
 
   const analyze=async(pn)=>{
     setBusy(true);setDemoNote("");setHomeErr("");
@@ -521,7 +550,11 @@ function App(){
       const r=await fetch("/api/v2/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({partNumber:pn})});
       const d=await r.json().catch(()=>null);
       if(d&&d.success&&d.original?.parameters?.length){
-        setOriginal(d.original);setPage("workbench");
+        if((d.original.variants||[]).length>=2){
+          setVariantBase(d.original);setPage("variants");   // 基础型号有多个封装变体 → 先让用户确认
+        }else{
+          setOriginal(d.original);setPage("workbench");
+        }
       }else if(pn.toUpperCase()==="STM32F103C8T6"){
         setOriginal(MOCK_ORIGINAL);setDemoNote("演示模式");setPage("workbench");
       }else{
@@ -548,6 +581,16 @@ function App(){
     </header>
     <main style={{minHeight:"calc(100vh - 130px)"}}>
       {page==="home"&&<HomePage onSubmit={analyze} busy={busy} err={homeErr}/>}
+      {page==="variants"&&variantBase&&<VariantPicker base={variantBase}
+        onPick={v=>{
+          const params=(variantBase.parameters||[]).map(p=>
+            (p.name.includes("封装")||String(p.nameEn||"").toLowerCase().includes("package"))&&v.package
+              ?{...p,value:v.package}:p);
+          setOriginal({...variantBase,partNumber:v.pn,parameters:params,variants:[]});
+          setPage("workbench");
+        }}
+        onSkip={()=>{setOriginal({...variantBase,variants:[]});setPage("workbench")}}
+        onBack={()=>setPage("home")}/>}
       {page==="workbench"&&original&&<Workbench original={original} demoNote={demoNote} onBack={()=>setPage("home")}/>}
     </main>
     <footer style={{textAlign:"center",padding:"14px",borderTop:`1px solid ${C.borderLight}`,fontSize:12,color:C.textMute,background:"#fff"}}>

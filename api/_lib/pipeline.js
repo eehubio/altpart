@@ -84,6 +84,22 @@ async function runPipeline({ partNumber, mode, scenario, preferredManufacturers 
     }
     if (candidatePNs.length) cache.set(candCk, { candidates: candidatePNs, eliminated: aiEliminated }, 86400);
   }
+  // 双保险：程序化排除原型号本身及其封装/温度变体（同芯片不同后缀）
+  const normPN = x => String(x).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const oN = normPN(partNumber);
+  candidatePNs = candidatePNs.filter(pn => {
+    const n = normPN(pn);
+    if (!n) return false;
+    if (n === oN || n.startsWith(oN) || oN.startsWith(n)) {
+      aiEliminated.push({ pn, reason: "与原型号相同或为其封装变体" });
+      return false;
+    }
+    return true;
+  });
+  // 去重
+  const seen = new Set();
+  candidatePNs = candidatePNs.filter(pn => { const n = normPN(pn); if (seen.has(n)) return false; seen.add(n); return true; });
+
   if (!candidatePNs.length) throw new Error("AI 未找到候选型号");
   console.log(`[Pipeline] AI recommended ${candidatePNs.length} candidates:`, candidatePNs.join(", "));
 
