@@ -816,16 +816,22 @@ function ResultPage({partNumber,scenario,onBack}){
       try{
         const r=await fetch("/api/v2/recommend",{method:"POST",headers:{"Content-Type":"application/json"},
           body:JSON.stringify({partNumber,mode:scenario==="domestic"?"domestic":scenario==="costDown"?"lowCost":scenario==="shortage"?"pin2pin":"funcCompat",scenario})});
-        if(!r.ok)throw new Error("api "+r.status);
-        const d=await r.json();
+        const d=await r.json().catch(()=>null);
         if(cancelled)return;
-        if(d.recommendations?.length){
+        if(d&&d.success&&d.recommendations?.length){
           setLive(adaptLive(d));
-        }else{ setLive(false);setNote("实时查询无结果，显示演示数据"); }
+        }else if(d&&d.success===false){
+          // 后端明确返回了错误原因
+          setLive(false);setNote(`真实查询失败：${d.error||"未知错误"}${d.hint?"（"+d.hint+"）":""} — 暂显示演示数据`);
+        }else if(!r.ok){
+          setLive(false);setNote(`后端返回 ${r.status} 错误，暂显示演示数据`);
+        }else{
+          setLive(false);setNote("实时查询无结果，显示演示数据");
+        }
       }catch(e){
         if(cancelled)return;
         setLive(false);
-        setNote("后端未部署或未配置 Gemini，显示演示数据");
+        setNote("无法连接后端（网络或超时），显示演示数据");
       }finally{ if(!cancelled)setLoading(false); }
     })();
     return()=>{cancelled=true};

@@ -8,7 +8,7 @@
 
 const { matchCategory, buildParamGuide, guessCategory } = require("./category-templates");
 
-// 默认用稳定可用的 gemini-2.5-flash；可通过环境变量切换到 2.5/3.x
+// 默认用 gemini-2.5-flash（gemini-2.0已于2026-06-01下线）；可用 GEMINI_MODEL 覆盖
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const CALL_TIMEOUT_MS = 25000;

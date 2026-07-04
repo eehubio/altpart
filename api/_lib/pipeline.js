@@ -94,33 +94,45 @@ async function runPipeline({ partNumber, mode, scenario, preferredManufacturers 
   const fetchResults = [];
   const unverified = [];
 
-  for (let i = 0; i < candidatePNs.length; i++) {
-    const pn = String(candidatePNs[i]).trim();
+  // 3b. 先分离：本地库命中的直接用；未命中的收集起来准备并发查询
+  const needLookup = [];
+  for (const pnRaw of candidatePNs) {
+    const pn = String(pnRaw).trim();
     if (!pn) continue;
-
-    // 3b. 本地库命中 → 直接使用（参数已是标准格式，需对齐 param id）
     const localHit = localBatch[pn.toUpperCase()];
     if (localHit) {
       stats.localDbHits++;
       fetchResults.push(alignLocalParams(localHit, params));
-      continue;
+    } else {
+      // 先查缓存
+      const cached = cache.get(`comp:${pn.toLowerCase()}`);
+      if (cached) { fetchResults.push(cached); }
+      else needLookup.push(pn);
     }
+  }
 
-    // 3c. 本地库未命中 → 查缓存 → API/AI
-    onProgress?.(`正在查询 ${pn}（${i + 1}/${candidatePNs.length}）...`);
-    const compCk = `comp:${pn.toLowerCase()}`;
-    let data = cache.get(compCk);
-    if (!data) {
-      data = await fetchComponentFromAPIs(pn, params);
-      if (data) {
-        cache.set(compCk, data, 7 * 86400);
+  // 3c. 未命中的候选：并发查询（避免串行超时），且限制数量控制在 Vercel 时限内
+  // 本地库已命中的越多，越不需要联网；这里最多并发查 MAX_AI_LOOKUP 个
+  const MAX_AI_LOOKUP = 6;
+  const toLookup = needLookup.slice(0, MAX_AI_LOOKUP);
+  const skipped = needLookup.slice(MAX_AI_LOOKUP);
+  skipped.forEach(pn => unverified.push({ partNumber: pn, manufacturer: "", reason: "超出单次查询上限，未校验" }));
+
+  if (toLookup.length) {
+    onProgress?.(`正在并发校验 ${toLookup.length} 个候选...`);
+    const results = await Promise.allSettled(
+      toLookup.map(pn => fetchComponentFromAPIs(pn, params))
+    );
+    results.forEach((r, i) => {
+      const pn = toLookup[i];
+      if (r.status === "fulfilled" && r.value) {
+        cache.set(`comp:${pn.toLowerCase()}`, r.value, 7 * 86400);
         stats.aiLookups++;
+        fetchResults.push(r.value);
+      } else {
+        unverified.push({ partNumber: pn, manufacturer: "", reason: "本地库未收录且联网查询失败" });
       }
-    }
-    if (data) fetchResults.push(data);
-    else unverified.push({ partNumber: pn, manufacturer: "", reason: "本地库未收录且联网查询失败" });
-
-    if (i < candidatePNs.length - 1) await new Promise(r => setTimeout(r, 300));
+    });
   }
 
   if (!fetchResults.length) throw new Error("所有候选型号均无法获取参数");
