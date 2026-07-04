@@ -74,8 +74,10 @@ async function callGemini(systemPrompt, userPrompt, maxTokens = 4096, useSearch 
 }
 
 function repairJSON(raw) {
+  try { return JSON.parse(raw.trim()); } catch (_) {}
   let s = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-  s = s.replace(/\[\d+\]/g, "").replace(/\[source\]/gi, "");
+  try { return JSON.parse(s); } catch (_) {}
+  s = s.replace(/\[source\]/gi, "");
   s = s.replace(/^[^{\[]+/, "");
   try { return JSON.parse(s); } catch (_) {}
   for (const pat of ['{"candidates"', '{"partNumber"', '{"params"', '{"recommendations"', '["']) {
