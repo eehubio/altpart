@@ -96,10 +96,26 @@ function repairJSON(raw) {
   for (let i = 0; i < ob; i++) s += "}";
   for (let i = 0; i < os; i++) s += "]";
   s = s.replace(/,\s*([}\]])/g, "$1");
-  try { return JSON.parse(s); } catch (e) {
-    console.error("[JSON] 解析失败:", s.slice(0, 300));
-    throw new Error("AI 返回 JSON 解析失败");
+  try { return JSON.parse(s); } catch (_) {}
+
+  let s2 = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+  s2 = s2.replace(/[\}\]\s]+$/,"");
+  const stack = [];
+  for (const ch of s2) { if (ch === "{") stack.push("}"); else if (ch === "[") stack.push("]"); else if (ch === "}" || ch === "]") stack.pop(); }
+  while (stack.length) s2 += stack.pop();
+  s2 = s2.replace(/,\s*([}\]])/g, "$1");
+  try { return JSON.parse(s2); } catch (_) {}
+
+  const candMatch = raw.match(/"candidates"\s*:\s*\[([\s\S]*?)(?:\]|\}|$)/);
+  if (candMatch) {
+    const items = (candMatch[1].match(/"([^"]+)"/g) || []).map(x => x.replace(/"/g, ""));
+    if (items.length) {
+      console.warn("[JSON] 用兜底提取到候选:", items.length, "个");
+      return { candidates: items, eliminated: [] };
+    }
   }
+  console.error("[JSON] 解析失败:", raw.slice(0, 300));
+  throw new Error("AI 返回 JSON 解析失败");
 }
 
 // ─── 分析原始器件（品类模板约束）───
