@@ -70,7 +70,7 @@ async function runPipeline({ partNumber, mode, scenario, preferredManufacturers 
     candidatePNs = candCached.candidates;
     aiEliminated = candCached.eliminated || [];
   } else {
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const aiResult = await getCandidates(original, original.category, params, preferredManufacturers, mode, scenario, AI_CANDIDATE_COUNT);
         candidatePNs = (aiResult.candidates || []).slice(0, AI_CANDIDATE_COUNT);

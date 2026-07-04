@@ -11,8 +11,8 @@ const { matchCategory, buildParamGuide, guessCategory } = require("./category-te
 // 默认用 gemini-2.5-flash（gemini-2.0已于2026-06-01下线）；可用 GEMINI_MODEL 覆盖
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-const CALL_TIMEOUT_MS = 25000;
-const MAX_RETRIES = 3;
+const CALL_TIMEOUT_MS = 18000;
+const MAX_RETRIES = 2;
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -160,7 +160,7 @@ candidates 给 ${count} 个真实型号（系统会再校验筛选，宁多勿�
 替代模式：${modeDesc}${mfrNote}
 请给出 ${count} 个候选替代型号。`;
 
-  const raw = await callGemini(sys, prompt, 2048);
+  const raw = await callGemini(sys, prompt, 2048, false);
   return repairJSON(raw);
 }
 
@@ -178,7 +178,7 @@ async function lookupPartSpecs(partNumber, referenceParams) {
 必须返回全部 ${referenceParams.length} 个参数。`;
 
   const prompt = `搜索 "${partNumber} datasheet"，返回以下参数：\n${paramList}`;
-  const raw = await callGemini(sys, prompt, 4096);
+  const raw = await callGemini(sys, prompt, 4096, false);
   return repairJSON(raw);
 }
 
