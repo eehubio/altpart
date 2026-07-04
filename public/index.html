@@ -200,7 +200,7 @@ function PartDetailModal({pn,rec,onClose}){
 }
 
 // ═══ 首页 ═══
-function HomePage({onSubmit,busy}){
+function HomePage({onSubmit,busy,err}){
   const[pn,setPn]=useState("");
   return(<div style={{maxWidth:640,margin:"60px auto",padding:"0 24px",textAlign:"center",animation:"fadeUp 0.5s ease both"}}>
     <svg width="56" height="56" viewBox="0 0 56 56" fill="none" style={{marginBottom:16}}>
@@ -217,6 +217,7 @@ function HomePage({onSubmit,busy}){
         style={{padding:"13px 26px",borderRadius:8,border:"none",background:pn.trim()?C.green:C.borderLight,color:"#fff",fontSize:14,fontWeight:600,cursor:pn.trim()?"pointer":"not-allowed"}}>
         {busy?"查询中…":"查询参数"}</button>
     </div>
+    {err&&<div style={{padding:"8px 14px",borderRadius:7,background:"#fdeaea",border:"1px solid #f5c6c6",color:"#a0302a",fontSize:13,marginBottom:12}}>⚠ {err}</div>}
     <div style={{fontSize:12,color:C.textMute}}>快速试试:&nbsp;
       {["STM32F103C8T6","LM358","AMS1117-3.3","TL431"].map(x=>(
         <button key={x} onClick={()=>setPn(x)} style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${C.border}`,background:"#fff",color:C.textSec,fontSize:11,fontFamily:"'DM Mono',monospace",cursor:"pointer",marginRight:4}}>{x}</button>))}
@@ -344,7 +345,8 @@ function CompareTable({original,recs}){
 
 // ═══ 工作台（双栏）═══
 function Workbench({original,demoNote,onBack}){
-  const[params,setParams]=useState((original.parameters||[]).slice(0,10));
+  const isNAv=v=>v==null||/^n\/?a$/i.test(String(v).trim());
+  const[params,setParams]=useState((original.parameters||[]).filter(p=>!isNAv(p.value)).slice(0,10));
   const[constraints,setConstraints]=useState({});
   const[mfrs,setMfrs]=useState([]);
   const[mfrInput,setMfrInput]=useState("");
@@ -380,14 +382,15 @@ function Workbench({original,demoNote,onBack}){
       const d=await r.json().catch(()=>null);
       if(d&&d.success&&d.recommendations?.length){
         setResult(d);setPhase("done");
+      }else if(original.partNumber==="STM32F103C8T6"&&original._dataPath==="demo"){
+        setResult({recommendations:MOCK_RECS,eliminated:[]});
+        setNote("演示模式数据");setPhase("done");
       }else{
-        setResult({recommendations:MOCK_RECS,eliminated:[],pipeline:null,_demo:true});
-        setNote(d&&d.success===false?`真实查询失败：${d.error||"未知错误"} — 暂显示演示数据`:"后端不可用，显示演示数据");
-        setPhase("done");
+        setNote(d&&d.success===false?`推荐失败：${d.error||"未知错误"}，请点击按钮重试`:"推荐失败，请稍后重试");
+        setPhase("idle");
       }
     }catch(e){
-      setResult({recommendations:MOCK_RECS,eliminated:[],pipeline:null,_demo:true});
-      setNote("无法连接后端（网络或超时），显示演示数据");setPhase("done");
+      setNote("网络错误或超时，请点击按钮重试");setPhase("idle");
     }
   };
 
@@ -474,9 +477,7 @@ function Workbench({original,demoNote,onBack}){
         正在推荐（AI候选 → 本地库校验 → 评分淘汰），约需 10–30 秒…
       </div>)}
       {phase==="done"&&result&&(<div style={{animation:"fadeUp 0.4s ease both"}}>
-        {result.pipeline&&(<div style={{padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.indigoBorder}`,background:C.indigoBg,marginBottom:12,fontSize:11,color:C.indigo}}>
-          🔀 AI推荐{result.pipeline.candidatesReceived}个 → 本地库命中{result.pipeline.localDbHits} / AI校验{result.pipeline.aiLookups} → 淘汰{result.pipeline.candidatesEliminated} → Top {result.pipeline.finalCount} · ⏱ {(result.pipeline.executionTimeMs/1000).toFixed(1)}s
-        </div>)}
+        {result.recommendations.some(r=>r._lowConfidence)&&(<div style={{padding:"8px 14px",borderRadius:7,background:C.amberBg,border:"1px solid #f0dca0",color:"#854f0b",fontSize:12,marginBottom:12}}>⚠ 以下候选的证据可信度低于常规阈值（多为AI来源且资料不全），仅供参考方向，务必人工核对 datasheet 后再决策</div>)}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
           <h3 style={{fontSize:16,fontWeight:700}}>推荐结果 <span style={{fontSize:13,color:C.textMute,fontWeight:400}}>· {result.recommendations.length} 个替代方案 · 点击型号查看采购详情</span></h3>
           <div style={{display:"flex",gap:6}}>
@@ -506,44 +507,33 @@ function Workbench({original,demoNote,onBack}){
   </div>);
 }
 
-// ═══ 后端状态 ═══
-function BackendStatus(){
-  const[st,setSt]=useState(null);
-  useEffect(()=>{fetch("/api/health").then(r=>r.ok?r.json():null).then(setSt).catch(()=>setSt(false));},[]);
-  if(st===null)return <span>检测后端中…</span>;
-  if(!st)return <span>前端演示模式（后端未部署）</span>;
-  const g=st.config?.geminiConfigured;
-  return <span>后端已连接 · {st.config?.mode}{g?" · Gemini已配置 ✓":" · ⚠ 未配置GEMINI_API_KEY"}</span>;
-}
-
 // ═══ 主应用 ═══
 function App(){
   const[page,setPage]=useState("home");
   const[original,setOriginal]=useState(null);
   const[busy,setBusy]=useState(false);
   const[demoNote,setDemoNote]=useState("");
+  const[homeErr,setHomeErr]=useState("");
 
   const analyze=async(pn)=>{
-    setBusy(true);setDemoNote("");
+    setBusy(true);setDemoNote("");setHomeErr("");
     try{
       const r=await fetch("/api/v2/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({partNumber:pn})});
       const d=await r.json().catch(()=>null);
       if(d&&d.success&&d.original?.parameters?.length){
         setOriginal(d.original);setPage("workbench");
+      }else if(pn.toUpperCase()==="STM32F103C8T6"){
+        setOriginal(MOCK_ORIGINAL);setDemoNote("演示模式");setPage("workbench");
       }else{
-        setOriginal({...MOCK_ORIGINAL,partNumber:pn.toUpperCase()===MOCK_ORIGINAL.partNumber?MOCK_ORIGINAL.partNumber:pn});
-        setDemoNote(d&&d.success===false?`参数查询失败：${d.error} — 显示演示参数`:"后端不可用 — 显示演示参数");
-        setPage("workbench");
+        setHomeErr(d&&d.success===false?`参数查询失败：${d.error||"未知错误"}`:"参数查询失败，请稍后重试");
       }
     }catch(e){
-      setOriginal(MOCK_ORIGINAL);setDemoNote("无法连接后端 — 显示演示参数");setPage("workbench");
+      if(pn.toUpperCase()==="STM32F103C8T6"){setOriginal(MOCK_ORIGINAL);setPage("workbench");}
+      else setHomeErr("网络错误或超时，请重试");
     }finally{setBusy(false);}
   };
 
   return(<React.Fragment>
-    <div style={{background:"linear-gradient(90deg,#fef9ed,#fff)",padding:"7px 24px",fontSize:12,color:"#854f0b",borderBottom:"1px solid #f0dca0",display:"flex",justifyContent:"space-between"}}>
-      <div><b>AltPart AI v2.3</b> · <BackendStatus/></div>
-    </div>
     <header style={{background:"#fff",borderBottom:`1px solid ${C.border}`,padding:"12px 24px"}}>
       <div style={{maxWidth:1400,margin:"0 auto",display:"flex",alignItems:"center",gap:10}}>
         <div style={{width:38,height:38,borderRadius:9,background:C.green,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -557,7 +547,7 @@ function App(){
       </div>
     </header>
     <main style={{minHeight:"calc(100vh - 130px)"}}>
-      {page==="home"&&<HomePage onSubmit={analyze} busy={busy}/>}
+      {page==="home"&&<HomePage onSubmit={analyze} busy={busy} err={homeErr}/>}
       {page==="workbench"&&original&&<Workbench original={original} demoNote={demoNote} onBack={()=>setPage("home")}/>}
     </main>
     <footer style={{textAlign:"center",padding:"14px",borderTop:`1px solid ${C.borderLight}`,fontSize:12,color:C.textMute,background:"#fff"}}>

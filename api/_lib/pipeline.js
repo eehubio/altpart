@@ -61,7 +61,8 @@ async function runPipeline({ partNumber, mode, scenario, preferredManufacturers 
     ? originalData                                     // 两段式流程：前端已通过 /analyze 拿到参数，直接复用
     : await resolveOriginalPart(partNumber, onProgress);
   const params = original.parameters;
-  const order = priorityOrder || params.map(p => p.id);
+  const isNAv = v => v === undefined || v === null || /^n\/?a$/i.test(String(v).trim());
+  const order = priorityOrder || params.filter(p => !isNAv(p.value)).map(p => p.id);
 
   // ─── Step 2: AI 推荐 10 个候选 ───
   onProgress?.(`AI 正在搜索候选型号（目标 ${AI_CANDIDATE_COUNT} 个）...`);
@@ -115,7 +116,7 @@ async function runPipeline({ partNumber, mode, scenario, preferredManufacturers 
 
   // 3c. 未命中的候选：并发查询（避免串行超时），且限制数量控制在 Vercel 时限内
   // 本地库已命中的越多，越不需要联网；这里最多并发查 MAX_AI_LOOKUP 个
-  const MAX_AI_LOOKUP = 6;
+  const MAX_AI_LOOKUP = 8;
   const toLookup = needLookup.slice(0, MAX_AI_LOOKUP);
   const skipped = needLookup.slice(MAX_AI_LOOKUP);
   skipped.forEach(pn => unverified.push({ partNumber: pn, manufacturer: "", reason: "超出单次查询上限，未校验" }));
@@ -143,6 +144,7 @@ async function runPipeline({ partNumber, mode, scenario, preferredManufacturers 
   onProgress?.("正在计算匹配评分并筛选...");
   const { calculateScore } = require("./scoring-node");
   const scored = [];
+  const lowScored = [];   // 低于淘汰线的候选（若最终无合格者，从中救回Top3）
   const eliminated = [
     ...aiEliminated.map(e => ({ partNumber: e.pn || e.partNumber || "", manufacturer: "", reason: e.reason || "AI排除" })),
     ...unverified, // 查询失败的候选也计入淘汰列表
@@ -156,9 +158,9 @@ async function runPipeline({ partNumber, mode, scenario, preferredManufacturers 
       eliminated.push({ partNumber: cand.partNumber, manufacturer: cand.manufacturer, reason: result.elimReason });
       continue;
     }
-    // 分数过低淘汰（差异太大）
+    // 分数过低：先收集，最后统一决定是否淘汰（避免纯AI模式下全军覆没）
     if (result.overallScore < ELIMINATION_THRESHOLD) {
-      eliminated.push({ partNumber: cand.partNumber, manufacturer: cand.manufacturer, reason: `综合匹配度过低 (${result.overallScore}分 < ${ELIMINATION_THRESHOLD}分)` });
+      lowScored.push({ cand, result });
       continue;
     }
 
@@ -176,6 +178,33 @@ async function runPipeline({ partNumber, mode, scenario, preferredManufacturers 
       replacementLevel: result.replacementLevel,
       dataSource: cand._source === "ezplm" ? "本地数据库" : cand._source === "digikey" ? "DigiKey" : "AI搜索",
     });
+  }
+
+  // 淘汰保底：合格者为空时，从低分候选中救回Top3（其P0/N/X等级已表达低可信度）
+  if (!scored.length && lowScored.length) {
+    lowScored.sort((a, b) => b.result.overallScore - a.result.overallScore);
+    for (const { cand, result } of lowScored.slice(0, 3)) {
+      const isPreferred = preferredManufacturers.some(m =>
+        cand.manufacturer.toLowerCase().includes(m.toLowerCase()) || m.toLowerCase().includes(cand.manufacturer.toLowerCase()));
+      scored.push({
+        partNumber: cand.partNumber, manufacturer: cand.manufacturer, description: cand.description,
+        internalPN: cand.internalPN || "", inPLM: cand._source === "ezplm", approved: cand.approved || false,
+        isPreferred, overallScore: result.overallScore,
+        technical: result.technical, evidenceCoverage: result.evidenceCoverage,
+        sourceConfidence: result.sourceConfidence, confidence: result.confidence,
+        pinVerified: result.pinVerified, _lowConfidence: true,
+        paramScores: result.paramScores, dimensionScores: result.dimensionScores,
+        replacementLevel: result.replacementLevel,
+        dataSource: cand._source === "ezplm" ? "本地数据库" : "AI搜索",
+      });
+    }
+    for (const { cand, result } of lowScored.slice(3)) {
+      eliminated.push({ partNumber: cand.partNumber, manufacturer: cand.manufacturer, reason: `综合可信度过低 (${result.overallScore}分)` });
+    }
+  } else {
+    for (const { cand, result } of lowScored) {
+      eliminated.push({ partNumber: cand.partNumber, manufacturer: cand.manufacturer, reason: `综合可信度过低 (${result.overallScore}分 < ${ELIMINATION_THRESHOLD}分)` });
+    }
   }
 
   // 排序: 综合分优先，分差<=3 时优选厂商靠前
